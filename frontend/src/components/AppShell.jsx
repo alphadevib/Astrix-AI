@@ -36,12 +36,13 @@ function Icon({ name, size = 18 }) {
 
 function Logo() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      <g fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-        <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-28 12 12)" opacity="0.7" />
-        <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
-      </g>
-    </svg>
+    <img
+      src="/astrix-emblem.svg"
+      alt="ASTRIX-AI"
+      width="26"
+      height="26"
+      style={{ display: 'block', borderRadius: '4px', filter: 'drop-shadow(0 0 8px rgba(0, 240, 255, 0.5))' }}
+    />
   )
 }
 
@@ -85,8 +86,8 @@ export default function AppShell({ pages, current, stream, children }) {
             <Logo />
           </span>
           <span className="brand-text">
-            <h1>ASTRIX</h1>
-            <span className="tagline">Detect. Reason. Recover. Learn.</span>
+            <h1>ASTRIX-AI</h1>
+            <span className="tagline">Autonomous Spacecraft Intelligence</span>
           </span>
         </div>
 

@@ -142,11 +142,14 @@ body {
 
 .brand h1 {
   font-family: var(--mono);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.32em;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   margin: 0;
   line-height: 1.1;
+  background: linear-gradient(90deg, #ffffff 65%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .brand .tagline {

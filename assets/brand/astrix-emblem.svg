@@ -1,0 +1,243 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGlow" cx="50%" cy="48%" r="65%" fx="50%" fy="45%">
+      <stop offset="0%" stop-color="#0E1736" />
+      <stop offset="50%" stop-color="#070B18" />
+      <stop offset="100%" stop-color="#03050C" />
+    </radialGradient>
+
+    <!-- Linear Gradients for Shield and Chevron -->
+    <linearGradient id="cyanVioletGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" />
+      <stop offset="45%" stop-color="#38BDF8" />
+      <stop offset="75%" stop-color="#818CF8" />
+      <stop offset="100%" stop-color="#A855F7" />
+    </linearGradient>
+
+    <linearGradient id="shieldBorderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.9" />
+      <stop offset="50%" stop-color="#3B82F6" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#9333EA" stop-opacity="0.85" />
+    </linearGradient>
+
+    <linearGradient id="shieldFillGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.08" />
+      <stop offset="60%" stop-color="#1E1B4B" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#030712" stop-opacity="0.75" />
+    </linearGradient>
+
+    <linearGradient id="leftLegGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E0F2FE" />
+      <stop offset="30%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+
+    <linearGradient id="rightLegGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DDD6FE" />
+      <stop offset="40%" stop-color="#A855F7" />
+      <stop offset="100%" stop-color="#6B21A8" />
+    </linearGradient>
+
+    <linearGradient id="orbitGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#00F0FF" />
+      <stop offset="35%" stop-color="#38BDF8" />
+      <stop offset="70%" stop-color="#818CF8" />
+      <stop offset="100%" stop-color="#C084FC" />
+    </linearGradient>
+
+    <linearGradient id="coreFacet" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95" />
+      <stop offset="60%" stop-color="#38BDF8" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#1E1B4B" stop-opacity="0.4" />
+    </linearGradient>
+
+    <!-- Filters for Glow Effect -->
+    <filter id="neonGlowCyan" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="intenseGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="16" result="blur2" />
+      <feGaussianBlur stdDeviation="6" result="blur1" />
+      <feMerge>
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Deep Space Backdrop -->
+  <rect width="512" height="512" rx="104" fill="url(#bgGlow)" />
+
+  <!-- Subtle Outer HUD Ring / Coordinate Ticks -->
+  <circle cx="256" cy="245" r="215" fill="none" stroke="#1E293B" stroke-width="1.2" stroke-dasharray="3 9" />
+  <circle cx="256" cy="245" r="195" fill="none" stroke="#00F0FF" stroke-width="1" stroke-opacity="0.15" />
+
+  <!-- 6 Autonomous Cognitive Loop Segment Markers [Detect, Reason, Plan, Verify, Recover, Learn] -->
+  <g opacity="0.65">
+    <!-- Node 1: Detect (Top-Left) -->
+    <circle cx="95" cy="175" r="3.5" fill="#00F0FF" filter="url(#neonGlowCyan)" />
+    <path d="M 85 175 L 105 175" stroke="#00F0FF" stroke-width="1" opacity="0.6" />
+    
+    <!-- Node 2: Reason (Top-Right) -->
+    <circle cx="417" cy="175" r="3.5" fill="#38BDF8" filter="url(#neonGlowCyan)" />
+    <path d="M 407 175 L 427 175" stroke="#38BDF8" stroke-width="1" opacity="0.6" />
+
+    <!-- Node 3: Plan (Right) -->
+    <circle cx="452" cy="275" r="3.5" fill="#818CF8" />
+    <path d="M 442 275 L 462 275" stroke="#818CF8" stroke-width="1" opacity="0.6" />
+
+    <!-- Node 4: Verify (Bottom-Right) -->
+    <circle cx="365" cy="405" r="3.5" fill="#A855F7" />
+    <path d="M 355 405 L 375 405" stroke="#A855F7" stroke-width="1" opacity="0.6" />
+
+    <!-- Node 5: Recover (Bottom-Left) -->
+    <circle cx="147" cy="405" r="3.5" fill="#A855F7" />
+    <path d="M 137 405 L 157 405" stroke="#A855F7" stroke-width="1" opacity="0.6" />
+
+    <!-- Node 6: Learn (Left) -->
+    <circle cx="60" cy="275" r="3.5" fill="#00F0FF" />
+    <path d="M 50 275 L 70 275" stroke="#00F0FF" stroke-width="1" opacity="0.6" />
+  </g>
+
+  <!-- LAYER 1: Autonomous Safety & Recovery Shield -->
+  <g id="shieldLayer">
+    <!-- Outer Shield Halo -->
+    <path d="M 256 68 
+             L 384 125 
+             C 384 250 340 340 256 388 
+             C 172 340 128 250 128 125 
+             Z" 
+          fill="none" 
+          stroke="url(#shieldBorderGrad)" 
+          stroke-width="3" 
+          stroke-linejoin="round"
+          filter="url(#neonGlowCyan)"
+          opacity="0.85" />
+
+    <!-- Inner Shield Surface (Translucent Digital Twin Field) -->
+    <path d="M 256 75 
+             L 376 130 
+             C 376 245 334 330 256 376 
+             C 178 330 136 245 136 130 
+             Z" 
+          fill="url(#shieldFillGrad)" 
+          stroke="#1E293B" 
+          stroke-width="1.5" />
+
+    <!-- Shield Interior Geometry / Safety Gridlines -->
+    <path d="M 256 78 L 256 374" stroke="#38BDF8" stroke-width="1" stroke-dasharray="4 6" opacity="0.3" />
+    <path d="M 170 210 L 342 210" stroke="#818CF8" stroke-width="1" stroke-dasharray="4 6" opacity="0.2" />
+  </g>
+
+  <!-- LAYER 2: Back Arc of Orbital Ring (passes behind the A-apex) -->
+  <g id="orbitBack" opacity="0.85">
+    <path d="M 105 270 C 130 185 240 145 385 160" 
+          fill="none" 
+          stroke="url(#orbitGrad)" 
+          stroke-width="4.5" 
+          stroke-linecap="round"
+          stroke-dasharray="140 12 30 8" />
+  </g>
+
+  <!-- LAYER 3: The Geometric 'A' Emblem (Apex, Legs, Bevels) -->
+  <g id="geometricA">
+    <!-- Center Core Energy Arrow (Zenith Vector) -->
+    <polygon points="256,92 278,160 256,150 234,160" fill="url(#coreFacet)" filter="url(#intenseGlow)" />
+
+    <!-- Left Structural Pylon (Electric Cyan Facet) -->
+    <polygon points="256,90 256,170 195,335 145,335 242,105" 
+             fill="url(#leftLegGrad)" />
+
+    <!-- Left Outer Chamfered Wing -->
+    <polygon points="242,105 145,335 125,335 175,200 230,100" 
+             fill="#0284C7" 
+             opacity="0.9" />
+
+    <!-- Right Structural Pylon (Hyper Violet Facet) -->
+    <polygon points="256,90 256,170 317,335 367,335 270,105" 
+             fill="url(#rightLegGrad)" />
+
+    <!-- Right Outer Chamfered Wing -->
+    <polygon points="270,105 367,335 387,335 337,200 282,100" 
+             fill="#581C87" 
+             opacity="0.9" />
+
+    <!-- Central A-Crossbar with Telemetry Safe-Bridge Gap -->
+    <polygon points="186,242 230,242 234,258 178,258" fill="#38BDF8" />
+    <polygon points="282,242 326,242 334,258 278,258" fill="#A855F7" />
+    <line x1="230" y1="250" x2="282" y2="250" stroke="#00F0FF" stroke-width="2.5" stroke-dasharray="2 4" />
+
+    <!-- Apex Precision Centerline -->
+    <line x1="256" y1="90" x2="256" y2="170" stroke="#FFFFFF" stroke-width="2" opacity="0.95" />
+
+    <!-- Internal Delta Negative Space (Inner A Triangle) -->
+    <polygon points="256,168 226,240 286,240" fill="#070B18" stroke="#00F0FF" stroke-width="1.5" opacity="0.9" />
+  </g>
+
+  <!-- LAYER 4: Front Arc of Orbital Ring (sweeps forward across the A) -->
+  <g id="orbitFront">
+    <!-- Primary Orbital Band -->
+    <path d="M 78 285 C 130 365 310 350 435 210" 
+          fill="none" 
+          stroke="url(#orbitGrad)" 
+          stroke-width="6.5" 
+          stroke-linecap="round"
+          filter="url(#neonGlowCyan)" />
+          
+    <path d="M 85 282 C 135 358 305 345 428 212" 
+          fill="none" 
+          stroke="#FFFFFF" 
+          stroke-width="1.8" 
+          opacity="0.9" />
+  </g>
+
+  <!-- LAYER 5: Autonomous Spacecraft / Satellite Node in Orbit -->
+  <!-- Positioned at the apex of the orbital path (x: 395, y: 195) -->
+  <g id="satelliteNode" transform="translate(395, 195) rotate(-32)">
+    <!-- Propulsion / Telemetry Sensor Aura -->
+    <circle cx="0" cy="0" r="14" fill="#00F0FF" opacity="0.3" filter="url(#neonGlowCyan)" />
+    
+    <!-- Left Solar Array Panel -->
+    <rect x="-24" y="-4" width="14" height="8" rx="1.5" fill="#38BDF8" stroke="#0284C7" stroke-width="1" />
+    <line x1="-17" y1="-4" x2="-17" y2="4" stroke="#0C4A6E" stroke-width="1" />
+    
+    <!-- Right Solar Array Panel -->
+    <rect x="10" y="-4" width="14" height="8" rx="1.5" fill="#818CF8" stroke="#4338CA" stroke-width="1" />
+    <line x1="17" y1="-4" x2="17" y2="4" stroke="#1E1B4B" stroke-width="1" />
+    
+    <!-- Center Bus / Spacecraft Main Body -->
+    <rect x="-8" y="-7" width="16" height="14" rx="2" fill="#F8FAFC" stroke="#38BDF8" stroke-width="1.2" />
+    <!-- AI Core Lens / Optical Sensor Payload -->
+    <circle cx="0" cy="0" r="3.5" fill="#00F0FF" filter="url(#intenseGlow)" />
+    
+    <!-- Communications High-Gain Dish / Antenna Mast -->
+    <line x1="0" y1="-7" x2="0" y2="-12" stroke="#F8FAFC" stroke-width="1.5" />
+    <circle cx="0" cy="-12" r="1.5" fill="#00F0FF" />
+  </g>
+
+  <!-- Apex Star Sparkle -->
+  <g transform="translate(256, 88)">
+    <circle cx="0" cy="0" r="3" fill="#FFFFFF" filter="url(#intenseGlow)" />
+    <line x1="0" y1="-8" x2="0" y2="8" stroke="#FFFFFF" stroke-width="1.5" />
+    <line x1="-8" y1="0" x2="8" y2="0" stroke="#FFFFFF" stroke-width="1.5" />
+  </g>
+
+  <!-- Lower Subtle Status Beacon -->
+  <g transform="translate(256, 440)">
+    <circle cx="0" cy="0" r="3" fill="#00F0FF" filter="url(#neonGlowCyan)" />
+    <text x="0" y="16" 
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif" 
+          font-size="9" 
+          font-weight="700" 
+          letter-spacing="3" 
+          fill="#64748B" 
+          text-anchor="middle">AUTONOMOUS</text>
+  </g>
+</svg>

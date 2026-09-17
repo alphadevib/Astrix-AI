@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="favA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" />
+      <stop offset="50%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#A855F7" />
+    </linearGradient>
+    <linearGradient id="favShield" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#9333EA" stop-opacity="0.8" />
+    </linearGradient>
+  </defs>
+  <!-- Background Badge -->
+  <rect width="64" height="64" rx="14" fill="#060914" />
+  
+  <!-- Safety Shield Outline -->
+  <path d="M 32 8 L 50 16 C 50 34 44 46 32 53 C 20 46 14 34 14 16 Z" 
+        fill="#0C1222" stroke="url(#favShield)" stroke-width="1.8" />
+
+  <!-- Orbital Ring Back -->
+  <path d="M 12 36 C 15 24 30 20 50 22" fill="none" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="14 3" opacity="0.6" />
+
+  <!-- Geometric A Structure -->
+  <polygon points="32,13 45,46 38,46 32,30 26,46 19,46" fill="url(#favA)" />
+  <polygon points="32,23 28,34 36,34" fill="#0C1222" />
+
+  <!-- Orbital Ring Front -->
+  <path d="M 8 38 C 16 50 42 47 56 28" fill="none" stroke="#00F0FF" stroke-width="2.2" stroke-linecap="round" />
+  
+  <!-- Micro Satellite Node -->
+  <circle cx="52" cy="27" r="2.5" fill="#FFFFFF" />
+  <line x1="49" y1="27" x2="55" y2="27" stroke="#38BDF8" stroke-width="1" />
+</svg>

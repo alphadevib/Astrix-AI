@@ -1,6 +1,13 @@
-# Astrix-AI — Autonomous Spacecraft Intelligence & eXecution
+<div align="center">
 
-**Detect. Reason. Recover. Learn.**
+<img src="./assets/brand/astrix-logo.svg" alt="ASTRIX-AI Logo" width="520"/>
+
+### AUTONOMOUS SPACECRAFT INTELLIGENCE &amp; EXECUTION
+**Detect &bull; Reason &bull; Plan &bull; Verify &bull; Recover &bull; Learn**
+
+</div>
+
+---
 
 Astrix-AI flies a simulated Earth-observation satellite from the launch pad to orbit,
 watches its telemetry, and when something goes wrong it detects the fault,
