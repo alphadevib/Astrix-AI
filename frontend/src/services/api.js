@@ -42,6 +42,10 @@ export const api = {
   injectFault: (key) => post(`/mission/inject/${key}`),
   clearFault: () => post('/mission/clear-fault'),
 
+  // --- interceptor trajectory check ---
+  interceptFaults: () => get('/intercept/faults'),
+  simulateIntercept: (config) => post('/intercept/simulate', config),
+
   // --- telemetry ---
   history: (limit = 180, spacecraftId = 'ASTRIX-01') =>
     get(`/telemetry/history?limit=${limit}&spacecraft_id=${encodeURIComponent(spacecraftId)}`),
@@ -58,6 +62,7 @@ export const api = {
       operator,
       note,
     }),
+  simulate: (actionId, frame) => post('/recovery/simulate', { action_id: actionId, frame }),
 
   // --- memory ---
   anomalies: (limit = 40) => get(`/anomalies?limit=${limit}`),

@@ -1,9 +1,9 @@
 {
-  "name": "astrix-mission-control",
+  "name": "astrix-ai",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "ASTRIX mission-control dashboard — Detect. Reason. Recover. Learn.",
+  "description": "Astrix-AI mission-control dashboard — Detect. Reason. Recover. Learn.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

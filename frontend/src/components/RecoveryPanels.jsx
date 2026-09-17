@@ -267,10 +267,7 @@ export function SafetyPanel({ safety }) {
 export function ApprovalBanner({ approval, onDecide, busy }) {
   if (!approval) return null
   return (
-    <div
-      className="banner"
-      style={{ borderColor: STATUS.warning, background: 'rgba(250,178,25,0.08)' }}
-    >
+    <div className="banner approval-banner" role="alert">
       <div className="banner-text">
         <div className="banner-title" style={{ color: STATUS.warning }}>
           Human approval required · {approval.risk_level}

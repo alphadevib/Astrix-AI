@@ -3,13 +3,20 @@
 
 import { INK, LEVEL_COLOR, OUTCOME_COLOR, RISK_COLOR, SEVERITY_COLOR } from '../theme'
 
-export function Panel({ title, note, children, style, className = '' }) {
+// `accent` tints the title marker; `alert` also makes the panel glow in that colour.
+export function Panel({ title, note, children, style, className = '', accent, alert = false, actions, id }) {
+  const panelStyle = accent ? { '--panel-accent': accent, ...style } : style
   return (
-    <section className={`panel ${className}`} style={style}>
-      {(title || note) && (
+    <section id={id} className={`panel ${alert && accent ? 'alert' : ''} ${className}`} style={panelStyle}>
+      {(title || note || actions) && (
         <header className="panel-head">
           {title && <h2 className="panel-title">{title}</h2>}
-          {note && <span className="panel-note">{note}</span>}
+          {(note || actions) && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              {note && <span className="panel-note">{note}</span>}
+              {actions}
+            </span>
+          )}
         </header>
       )}
       {children}
@@ -17,11 +24,11 @@ export function Panel({ title, note, children, style, className = '' }) {
   )
 }
 
-export function Pill({ color = INK.muted, children, title }) {
+export function Pill({ color = INK.muted, children, label, title }) {
   return (
-    <span className="pill" title={title} style={{ borderColor: color }}>
+    <span className="pill" title={title} style={{ '--pill': color }}>
       <span className="dot" style={{ background: color }} aria-hidden="true" />
-      {children}
+      {children ?? label}
     </span>
   )
 }
@@ -59,7 +66,7 @@ export function VerdictPill({ status }) {
 
 export function Tile({ label, value, unit, sub, color }) {
   return (
-    <div className="tile">
+    <div className="tile" style={color ? { '--tile-accent': color } : undefined}>
       <div className="tile-label">{label}</div>
       <div className="tile-value" style={color ? { color } : undefined}>
         {value}

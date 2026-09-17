@@ -24,6 +24,7 @@ export function MissionControls({ mission, onError }) {
   const [interval, setIntervalValue] = useState(0.35)
   const [includeLaunch, setIncludeLaunch] = useState(true)
   const [launchScale, setLaunchScale] = useState(20)
+  const [launchFault, setLaunchFault] = useState('none')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -79,6 +80,7 @@ export function MissionControls({ mission, onError }) {
                   dt: 1.0,
                   include_launch: includeLaunch,
                   launch_time_scale: Number(launchScale),
+                  launch_fault: launchFault === 'none' ? null : launchFault,
                 }),
               )
             }
@@ -96,6 +98,22 @@ export function MissionControls({ mission, onError }) {
           />
           fly launch
         </label>
+
+        {includeLaunch && (
+          <label className="field">
+            launch mode
+            <select
+              value={launchFault}
+              disabled={running}
+              onChange={(event) => setLaunchFault(event.target.value)}
+            >
+              <option value="none">Nominal Ascent</option>
+              <option value="premature_meco">Abort: Premature MECO</option>
+              <option value="ascent_thrust_loss">Fault: Thrust Deficit</option>
+              <option value="max_q_excursion">Fault: Max-Q Spike</option>
+            </select>
+          </label>
+        )}
 
         <label className="field">
           launch speed
@@ -197,7 +215,7 @@ export function MissionControls({ mission, onError }) {
 export function Vitals({ frame, resources }) {
   if (!frame) {
     return (
-      <div className="grid cols-4">
+      <div className="tile-grid">
         {['Battery', 'Power', 'Temperature', 'Pointing'].map((label) => (
           <Tile key={label} label={label} value="—" />
         ))}
@@ -220,7 +238,7 @@ export function Vitals({ frame, resources }) {
   const vibColor = worstVibration > 1.2 ? STATUS.warning : INK.primary
 
   return (
-    <div className="grid cols-4">
+    <div className="tile-grid">
       <Tile
         label="Battery"
         value={fmt.num(frame.state_of_charge, 1)}

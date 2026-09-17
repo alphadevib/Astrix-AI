@@ -80,6 +80,7 @@ class MissionRunner:
         seed: int | None = 42,
         include_launch: bool = True,
         launch_time_scale: float = 20.0,
+        launch_fault: str | None = None,
     ) -> dict:
         """Start (or restart) the mission from the launch pad, or directly in orbit."""
         from telemetry.scenarios import get_scenario
@@ -95,6 +96,7 @@ class MissionRunner:
 
         self._sim = None
         self._launch = None
+        self._launch_fault = launch_fault
         self._interval = max(0.02, interval)
         self._dt = dt
         self._settle_frames = max(0, settle_frames)
@@ -179,7 +181,7 @@ class MissionRunner:
     async def _fly_launch(self) -> None:
         from telemetry.launch import LaunchProfile, milestone
 
-        profile = LaunchProfile()
+        profile = LaunchProfile(fault=getattr(self, "_launch_fault", None))
         self._launch = profile
         step = LAUNCH_TICK_SECONDS * self._time_scale
         while not profile.finished:
@@ -193,6 +195,19 @@ class MissionRunner:
                 self.milestones.append(record)
                 self.pipeline.bus.publish("launch_milestone", record)
             await asyncio.sleep(LAUNCH_TICK_SECONDS)
+
+        if profile.aborted:
+            self.phase = "ASCENT_ABORT"
+            self.pipeline.bus.publish(
+                "launch_milestone",
+                {
+                    "key": "ascent_abort",
+                    "t": profile.t,
+                    "title": "Ascent Abort",
+                    "description": f"Launch vehicle aborted: {profile.fault}",
+                    "at_t": round(profile.t, 1),
+                },
+            )
 
     # -- orbit -------------------------------------------------------------- #
 
@@ -240,6 +255,9 @@ class MissionRunner:
         try:
             if include_launch:
                 await self._fly_launch()
+                if self.phase == "ASCENT_ABORT":
+                    log.warning("launch sequence ended in ascent abort — vehicle recovered")
+                    return
             await self._acquire_orbit()
             while True:
                 await self._step()

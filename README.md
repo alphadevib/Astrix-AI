@@ -1,16 +1,17 @@
-# ASTRIX — Autonomous Spacecraft Intelligence & eXecution
+# Astrix-AI — Autonomous Spacecraft Intelligence & eXecution
 
 **Detect. Reason. Recover. Learn.**
 
-ASTRIX flies a simulated Earth-observation satellite from the launch pad to orbit,
+Astrix-AI flies a simulated Earth-observation satellite from the launch pad to orbit,
 watches its telemetry, and when something goes wrong it detects the fault,
 diagnoses it, plans a recovery, proves the plan against safety rules and a digital
 twin, executes it (or asks a human first), measures what actually happened, and
 writes the lesson to mission memory.
 
-Everything runs locally. No API key is required: with one configured the reasoning
-agents use an LLM, and without one they fall back to deterministic reasoners. The
-detection, safety, simulation and memory layers are identical either way.
+Everything runs locally. Multi-model gateway supports Anthropic, Google Gemini (free tier),
+Groq (free tier), OpenAI, and local offline models via Ollama. No API key is strictly required:
+without one, every agent falls back to its deterministic reasoner seamlessly. The
+detection, safety, simulation, ontological knowledge graph and memory layers are identical either way.
 
 ---
 

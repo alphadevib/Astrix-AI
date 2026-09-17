@@ -61,7 +61,7 @@ export default function MissionMemory() {
       )}
 
       {profile && (
-        <div className="grid cols-4">
+        <div className="tile-grid">
           <Tile label="Spacecraft" value={<span style={{ fontSize: 16 }}>{profile.spacecraft_id}</span>} sub={`status ${profile.status}`} />
           <Tile label="Missions flown" value={profile.missions_flown} />
           <Tile
@@ -185,6 +185,7 @@ export default function MissionMemory() {
         {anomalies.length === 0 ? (
           <Empty>No anomalies recorded.</Empty>
         ) : (
+          <div className="table-wrap">
           <table className="data">
             <thead>
               <tr>
@@ -216,6 +217,7 @@ export default function MissionMemory() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Panel>
 
@@ -223,6 +225,7 @@ export default function MissionMemory() {
         {audit.length === 0 ? (
           <Empty>No verification decisions recorded yet.</Empty>
         ) : (
+          <div className="table-wrap">
           <table className="data">
             <thead>
               <tr>
@@ -245,6 +248,7 @@ export default function MissionMemory() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Panel>
     </div>

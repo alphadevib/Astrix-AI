@@ -15,9 +15,15 @@
 //
 // Snapshots arrive at 2–10 Hz; the canvas interpolates between them at display
 // rate so motion is smooth regardless of the telemetry interval.
+//
+// Interactive: scroll to zoom, drag to pan, double-click to reset. Hovering the
+// vehicle, ground station, sun, wheels or a schedule arc shows a readout; clicking
+// the vehicle (or the follow button) locks the camera onto it. Layers can be
+// toggled from the toolbar.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { INK, SERIES, SEVERITY_COLOR, STATUS } from '../theme'
+import useCanvasViewport, { drawTooltip, pickHit } from './useCanvasViewport'
 
 const EARTH_R = 6371
 const ORBIT_ALT = 500
@@ -43,6 +49,19 @@ const COLORS = {
   flame: '#ffb347',
   trail: 'rgba(250, 178, 25, 0.75)',
   orbitRing: 'rgba(195, 194, 183, 0.25)',
+}
+
+const DEFAULT_LAYERS = { trail: true, debris: true, schedule: true, eclipse: true, wheels: true }
+const LAYER_LABELS = {
+  launch: [
+    ['trail', 'trail'],
+    ['debris', 'debris'],
+  ],
+  orbit: [
+    ['schedule', 'schedule'],
+    ['eclipse', 'eclipse'],
+    ['wheels', 'wheels'],
+  ],
 }
 
 const lerp = (a, b, t) => a + (b - a) * t
@@ -82,11 +101,8 @@ function progress(ref, now) {
 
 // ---------------------------------------------------------------- launch scene
 
-function drawLaunch(ctx, w, h, snap, track, now) {
-  ctx.fillStyle = COLORS.space
-  ctx.fillRect(0, 0, w, h)
-  drawStars(ctx, w, h)
-
+function drawLaunch(ctx, w, h, snap, track, now, opts) {
+  const { layers, hits } = opts
   const alt = snap?.altitude_km ?? 0
   const down = snap?.downrange_km ?? 0
 
@@ -144,9 +160,10 @@ function drawLaunch(ctx, w, h, snap, track, now) {
   const [padX2, padY] = toScreen(0, 0)
   ctx.fillStyle = INK.secondary
   ctx.fillRect(padX2 - 5, padY - 3, 10, 3)
+  hits.push({ x: padX2, y: padY, r: 8, lines: ['Launch pad', 'downrange 0 km'] })
 
   // Trajectory trail.
-  if (track.length > 1) {
+  if (layers.trail && track.length > 1) {
     ctx.strokeStyle = COLORS.trail
     ctx.lineWidth = 2
     ctx.beginPath()
@@ -161,6 +178,22 @@ function drawLaunch(ctx, w, h, snap, track, now) {
   if (!snap) return
 
   const [vx, vy] = toScreen(down, alt)
+  opts.focus = [vx, vy]
+  hits.push({
+    x: vx,
+    y: vy,
+    r: 16,
+    kind: 'vehicle',
+    color: STATUS.good,
+    lines: [
+      `${stageName(snap)} · T${(snap.t ?? 0) < 0 ? '−' : '+'}${Math.abs(snap.t ?? 0).toFixed(0)} s`,
+      `alt ${alt.toFixed(1)} km · downrange ${down.toFixed(0)} km`,
+      `speed ${(snap.speed_kms ?? 0).toFixed(2)} km/s · ${(snap.acceleration_g ?? 0).toFixed(2)} g`,
+      `q ${(snap.dynamic_pressure_kpa ?? 0).toFixed(1)} kPa · throttle ${(snap.throttle_pct ?? 0).toFixed(0)}%`,
+      `FPA ${(snap.flight_path_angle_deg ?? 0).toFixed(1)}° · range ${snap.range_safety ?? '—'}`,
+      'click to follow',
+    ],
+  })
   // Vehicle heading: flight path angle relative to local horizontal, plus the
   // rotation of local vertical around the Earth.
   const theta = down / EARTH_R
@@ -169,11 +202,17 @@ function drawLaunch(ctx, w, h, snap, track, now) {
 
   // Separated hardware drifts away and fades after its milestone.
   const t = snap.t ?? 0
-  if (t >= 153) drawDebris(ctx, vx, vy, heading, t - 153, 'stage1')
-  if (t >= 205) drawDebris(ctx, vx, vy, heading, t - 205, 'fairing')
-  if (t >= 560) drawDebris(ctx, vx, vy, heading, t - 560, 'upper')
+  if (layers.debris && t >= 153) drawDebris(ctx, vx, vy, heading, t - 153, 'stage1')
+  if (layers.debris && t >= 205) drawDebris(ctx, vx, vy, heading, t - 205, 'fairing')
+  if (layers.debris && t >= 560) drawDebris(ctx, vx, vy, heading, t - 560, 'upper')
 
   drawVehicle(ctx, vx, vy, heading, snap, now)
+}
+
+function stageName(snap) {
+  if ((snap.stage ?? 0) >= 3) return 'ASTRIX-01 (free-flying)'
+  if ((snap.stage ?? 0) === 2) return 'Stage 2'
+  return (snap.t ?? 0) < 0 ? 'On pad' : 'Stage 1'
 }
 
 function drawStars(ctx, w, h) {
@@ -300,10 +339,8 @@ function orbitPhase(frame) {
   return ((angle / (2 * Math.PI)) % 1 + 1) % 1
 }
 
-function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabled) {
-  ctx.fillStyle = COLORS.space
-  ctx.fillRect(0, 0, w, h)
-  drawStars(ctx, w, h)
+function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabled, opts) {
+  const { layers, hits } = opts
 
   const cx = w / 2
   const cy = h / 2
@@ -318,15 +355,17 @@ function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabl
   const shadowAngle = angleOf(shadowMid)
 
   // Shadow cylinder behind the Earth.
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.rotate(shadowAngle)
-  const shadow = ctx.createLinearGradient(0, 0, orbitPx * 1.4, 0)
-  shadow.addColorStop(0, 'rgba(0,0,0,0.55)')
-  shadow.addColorStop(1, 'rgba(0,0,0,0)')
-  ctx.fillStyle = shadow
-  ctx.fillRect(0, -earthPx, orbitPx * 1.4, earthPx * 2)
-  ctx.restore()
+  if (layers.eclipse) {
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(shadowAngle)
+    const shadow = ctx.createLinearGradient(0, 0, orbitPx * 1.4, 0)
+    shadow.addColorStop(0, 'rgba(0,0,0,0.55)')
+    shadow.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = shadow
+    ctx.fillRect(0, -earthPx, orbitPx * 1.4, earthPx * 2)
+    ctx.restore()
+  }
 
   // Sun indicator.
   const sunX = cx - Math.cos(shadowAngle) * (orbitPx + 40)
@@ -339,6 +378,13 @@ function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabl
   ctx.font = '10px ui-monospace, monospace'
   ctx.textAlign = 'center'
   ctx.fillText('SUN', sunX, sunY - 10)
+  hits.push({
+    x: sunX,
+    y: sunY,
+    r: 10,
+    color: '#ffd36b',
+    lines: ['Sun direction', `eclipse from ${(ECLIPSE_FROM * 100).toFixed(0)}% of orbit`],
+  })
 
   // Earth with a day/night terminator.
   const glow = ctx.createRadialGradient(cx, cy, earthPx, cx, cy, earthPx * 1.08)
@@ -386,16 +432,38 @@ function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabl
 
   ctx.lineWidth = 5
   ctx.lineCap = 'butt'
-  ctx.strokeStyle = 'rgba(138,138,128,0.35)'
-  ctx.beginPath()
-  ctx.arc(cx, cy, orbitPx, angleOf(ECLIPSE_FROM), angleOf(1))
-  ctx.stroke()
-  ARCS.forEach((arc) => {
-    ctx.strokeStyle = arc.color
+  if (layers.eclipse) {
+    ctx.strokeStyle = 'rgba(138,138,128,0.35)'
     ctx.beginPath()
-    ctx.arc(cx, cy, orbitPx, angleOf(arc.from), angleOf(arc.to))
+    ctx.arc(cx, cy, orbitPx, angleOf(ECLIPSE_FROM), angleOf(1))
     ctx.stroke()
-  })
+    const mid = angleOf((ECLIPSE_FROM + 1) / 2)
+    hits.push({
+      x: cx + Math.cos(mid) * orbitPx,
+      y: cy + Math.sin(mid) * orbitPx,
+      r: 14,
+      lines: ['Eclipse', `${(ECLIPSE_FROM * 100).toFixed(0)}–100% of orbit`, 'battery discharging, no solar input'],
+    })
+  }
+  if (layers.schedule) {
+    ARCS.forEach((arc) => {
+      ctx.strokeStyle = arc.color
+      ctx.beginPath()
+      ctx.arc(cx, cy, orbitPx, angleOf(arc.from), angleOf(arc.to))
+      ctx.stroke()
+      const mid = angleOf((arc.from + arc.to) / 2)
+      hits.push({
+        x: cx + Math.cos(mid) * orbitPx,
+        y: cy + Math.sin(mid) * orbitPx,
+        r: 14,
+        color: arc.color,
+        lines: [
+          arc.label[0].toUpperCase() + arc.label.slice(1),
+          `${(arc.from * 100).toFixed(0)}–${(arc.to * 100).toFixed(0)}% of orbit`,
+        ],
+      })
+    })
+  }
 
   // Ground station, under the middle of the contact arc.
   const gsAngle = angleOf(0.34)
@@ -403,6 +471,13 @@ function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabl
   const gsY = cy + Math.sin(gsAngle) * earthPx
   ctx.fillStyle = SERIES[2]
   ctx.fillRect(gsX - 3, gsY - 3, 6, 6)
+  hits.push({
+    x: gsX,
+    y: gsY,
+    r: 9,
+    color: SERIES[2],
+    lines: ['Ground station', frame?.ground_contact ? 'in contact · downlink active' : 'no contact'],
+  })
 
   if (!frame) return
 
@@ -414,6 +489,7 @@ function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabl
   const satAngle = angleOf(f)
   const sx = cx + Math.cos(satAngle) * orbitPx
   const sy = cy + Math.sin(satAngle) * orbitPx
+  opts.focus = [sx, sy]
 
   // Downlink beam while in contact.
   if (frame.ground_contact) {
@@ -428,6 +504,21 @@ function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabl
   }
 
   const color = SEVERITY_COLOR[severity] ?? STATUS.good
+  hits.push({
+    x: sx,
+    y: sy,
+    r: 18,
+    kind: 'vehicle',
+    color,
+    lines: [
+      `${frame.spacecraft_id ?? 'ASTRIX-01'} · ${severity ?? 'NORMAL'}`,
+      `orbit phase ${((((f % 1) + 1) % 1) * 100).toFixed(0)}% · ${String(frame.mode ?? '').toLowerCase()}`,
+      `SoC ${(frame.state_of_charge ?? 0).toFixed(1)}% · solar ${(frame.solar_power ?? 0).toFixed(0)} W`,
+      `bus ${(frame.temperature ?? 0).toFixed(1)} °C · att err ${(frame.attitude_error_deg ?? 0).toFixed(3)}°`,
+      `link ${(frame.communication_signal ?? 0).toFixed(0)}% · ${frame.in_eclipse ? 'eclipse' : 'sunlit'}`,
+      'click to follow',
+    ],
+  })
   if (severity && severity !== 'NORMAL') {
     const pulse = 0.5 + 0.5 * Math.sin(now / 220)
     ctx.strokeStyle = color
@@ -447,10 +538,25 @@ function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabl
 
   // Reaction-wheel strip next to the satellite: one bar per wheel, height by
   // vibration, crossed out when isolated.
+  if (!layers.wheels) return
   const vib = [1, 2, 3, 4].map((n) => frame[`wheel_${n}_vibration`] ?? 0)
   const outward = satAngle
   const lx = sx + Math.cos(outward) * 34 - 16
   const ly = sy + Math.sin(outward) * 34
+  hits.push({
+    x: lx + 16,
+    y: ly - 8,
+    r: 14,
+    lines: [
+      'Reaction wheels',
+      ...vib.map(
+        (v, i) =>
+          `RW${i + 1} ${v.toFixed(2)} mm/s · ${(frame[`wheel_${i + 1}_rpm`] ?? 0).toFixed(0)} rpm${
+            wheelsDisabled?.includes(i + 1) ? ' · ISOLATED' : ''
+          }`,
+      ),
+    ],
+  })
   vib.forEach((v, i) => {
     const bx = lx + i * 9
     const barH = Math.min(18, 3 + v * 4)
@@ -467,7 +573,10 @@ function drawOrbit(ctx, w, h, frame, prevFrame, mix, severity, now, wheelsDisabl
     }
   })
 
-  // Legend.
+}
+
+// Drawn in screen space so it stays put while the scene is zoomed.
+function drawOrbitLegend(ctx, h) {
   ctx.textAlign = 'left'
   ctx.font = '10px ui-monospace, monospace'
   const legend = [...ARCS, { color: 'rgba(138,138,128,0.6)', label: 'eclipse' }]
@@ -486,6 +595,8 @@ export default function MissionView2D({ phase, launch, launchTrack, frames, seve
   const canvasRef = useRef(null)
   const sizeRef = useRef({ w: 0, h: 0 })
   const isLaunch = LAUNCH_PHASES.has(phase)
+  const [layers, setLayers] = useState(DEFAULT_LAYERS)
+  const [follow, setFollow] = useState(false)
 
   const latest = frames.length ? frames[frames.length - 1] : null
 
@@ -493,7 +604,36 @@ export default function MissionView2D({ phase, launch, launchTrack, frames, seve
   const frameInterp = useInterpolated(latest)
 
   const stateRef = useRef({})
-  stateRef.current = { isLaunch, launchTrack, severity, wheelsDisabled, phase }
+  stateRef.current = { isLaunch, launchTrack, severity, wheelsDisabled, phase, layers, follow }
+  const hitsRef = useRef([])
+  const focusRef = useRef(null)
+
+  const viewport = useCanvasViewport(canvasRef, {
+    onClick: (bx, by) => {
+      const hit = pickHit(hitsRef.current, bx, by, viewport.view.current.scale)
+      if (hit?.kind === 'vehicle') toggleFollow()
+    },
+  })
+  const { reset: resetViewport, zoomBy } = viewport
+
+  function toggleFollow() {
+    setFollow((on) => {
+      if (!on && viewport.view.current.scale < 1.6) zoomBy(2.5 / viewport.view.current.scale)
+      return !on
+    })
+  }
+
+  const resetView = () => {
+    setFollow(false)
+    resetViewport()
+  }
+
+  // Switching scene resets the camera: launch and orbit use different geometry.
+  const sceneKey = isLaunch || !(phase === 'ORBIT' || latest) ? 'launch' : 'orbit'
+  useEffect(() => {
+    setFollow(false)
+    resetViewport()
+  }, [sceneKey, resetViewport])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -514,9 +654,20 @@ export default function MissionView2D({ phase, launch, launchTrack, frames, seve
     const { w, h, dpr } = sizeRef.current
     if (!canvas || !w || !h) return
     const ctx = canvas.getContext('2d')
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const s = stateRef.current
 
+    // Screen-space background.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.fillStyle = COLORS.space
+    ctx.fillRect(0, 0, w, h)
+    drawStars(ctx, w, h)
+
+    // Follow uses last frame's vehicle position — one frame of lag is invisible.
+    if (s.follow && focusRef.current) viewport.centerOn(focusRef.current[0], focusRef.current[1], w, h)
+    viewport.apply(ctx, dpr)
+
+    const opts = { layers: s.layers, hits: [], focus: null }
+    let orbitScene = false
     if (s.isLaunch) {
       const { prev, next } = launchInterp.current
       const mix = progress(launchInterp, now)
@@ -530,14 +681,91 @@ export default function MissionView2D({ phase, launch, launchTrack, frames, seve
               flight_path_angle_deg: lerp(prev.flight_path_angle_deg, next.flight_path_angle_deg, mix),
             }
           : next
-      drawLaunch(ctx, w, h, snap, s.launchTrack, now)
+      drawLaunch(ctx, w, h, snap, s.launchTrack, now, opts)
     } else if (s.phase === 'ORBIT' || frameInterp.current.next) {
       const { prev, next } = frameInterp.current
-      drawOrbit(ctx, w, h, next, prev, progress(frameInterp, now), s.severity, now, s.wheelsDisabled)
+      drawOrbit(ctx, w, h, next, prev, progress(frameInterp, now), s.severity, now, s.wheelsDisabled, opts)
+      orbitScene = true
     } else {
-      drawLaunch(ctx, w, h, null, [], now)
+      drawLaunch(ctx, w, h, null, [], now, opts)
     }
+    hitsRef.current = opts.hits
+    focusRef.current = opts.focus
+
+    // Hover: highlight ring in scene space, tooltip in screen space.
+    const pointer = viewport.pointer.current
+    const scale = viewport.view.current.scale
+    let hovered = null
+    if (pointer.inside && !pointer.down) {
+      const [bx, by] = viewport.toBase(pointer.x, pointer.y)
+      hovered = pickHit(opts.hits, bx, by, scale)
+      if (hovered) {
+        ctx.strokeStyle = hovered.color ?? INK.secondary
+        ctx.lineWidth = 1.5 / scale
+        ctx.setLineDash([3 / scale, 3 / scale])
+        ctx.beginPath()
+        ctx.arc(hovered.x, hovered.y, (hovered.r ?? 10) / Math.min(scale, 3) + 3 / scale, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
+    }
+    canvas.style.cursor = pointer.down ? 'grabbing' : hovered?.kind === 'vehicle' ? 'pointer' : 'grab'
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    if (orbitScene && s.layers.schedule) drawOrbitLegend(ctx, h)
+    if (hovered) drawTooltip(ctx, pointer.x, pointer.y, w, h, hovered.lines, hovered.color)
   })
 
-  return <canvas ref={canvasRef} className="mission-canvas" aria-label="2D mission view" />
+  return (
+    <>
+      <canvas
+        ref={canvasRef}
+        className="mission-canvas"
+        aria-label="2D mission view — scroll to zoom, drag to pan, hover for readouts"
+      />
+      <CanvasToolbar
+        layers={layers}
+        layerLabels={LAYER_LABELS[sceneKey]}
+        onToggleLayer={(key) => setLayers((current) => ({ ...current, [key]: !current[key] }))}
+        follow={follow}
+        onFollow={toggleFollow}
+        onZoom={zoomBy}
+        onReset={resetView}
+      />
+    </>
+  )
+}
+
+export function CanvasToolbar({ layers, layerLabels = [], onToggleLayer, follow, onFollow, onZoom, onReset, children }) {
+  return (
+    <div className="canvas-toolbar">
+      {layerLabels.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          className={`chip ${layers[key] ? 'on' : ''}`}
+          aria-pressed={layers[key]}
+          onClick={() => onToggleLayer(key)}
+        >
+          {label}
+        </button>
+      ))}
+      {children}
+      {onFollow && (
+        <button type="button" className={`chip ${follow ? 'on' : ''}`} aria-pressed={follow} onClick={onFollow}>
+          follow
+        </button>
+      )}
+      <span className="toolbar-sep" aria-hidden="true" />
+      <button type="button" className="chip icon" onClick={() => onZoom(1.25)} aria-label="Zoom in">
+        +
+      </button>
+      <button type="button" className="chip icon" onClick={() => onZoom(0.8)} aria-label="Zoom out">
+        −
+      </button>
+      <button type="button" className="chip" onClick={onReset} title="Reset view (or double-click the canvas)">
+        reset
+      </button>
+    </div>
+  )
 }

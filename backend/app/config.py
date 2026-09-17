@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     )
 
     # ---------- service ----------
-    app_name: str = "ASTRIX"
+    app_name: str = "Astrix-AI"
     tagline: str = "Detect. Reason. Recover. Learn."
     api_base: str = "http://127.0.0.1:8000"
     cors_origins: list[str] = Field(
@@ -47,11 +47,19 @@ class Settings(BaseSettings):
         ]
     )
 
-    # ---------- agent reasoning ----------
+    # ---------- agent reasoning (multi-model gateway) ----------
     llm_enabled: bool = True
-    llm_model: str = "claude-opus-5"
+    llm_provider: str = "auto"  # "auto", "anthropic", "gemini", "groq", "openai", "local"
+    llm_model: str = "claude-3-7-sonnet-20250219"
+    llm_fast_model: str = "claude-3-5-haiku-20241022"
     llm_max_tokens: int = 4096
-    llm_timeout_seconds: float = 45.0
+    llm_timeout_seconds: float = 30.0
+    gemini_api_key: str | None = None
+    openai_api_key: str | None = None
+    groq_api_key: str | None = None
+    openai_api_base: str = "https://api.openai.com/v1"
+    local_model_url: str = "http://localhost:11434/v1"
+    thinking_budget_tokens: int = 1024
 
     # ---------- memory ----------
     database_url: str = f"sqlite:///{(DATA_DIR / 'astrix.db').as_posix()}"

@@ -70,9 +70,13 @@ export function useMissionStream() {
   const [launchTrack, setLaunchTrack] = useState([])
   const [milestones, setMilestones] = useState([])
   const [timeline, setTimeline] = useState(EMPTY_TIMELINE)
+  const [criticReview, setCriticReview] = useState(null)
+  const [thoughts, setThoughts] = useState([])
 
   const socketRef = useRef(null)
   const retryRef = useRef(null)
+  const frameBufferRef = useRef([])
+  const flushTimerRef = useRef(null)
   // Latest frame seq, readable synchronously inside the event handler. Events for a
   // frame arrive after that frame's telemetry on the same ordered socket.
   const seqRef = useRef(null)
@@ -90,6 +94,11 @@ export function useMissionStream() {
   }, [])
 
   const resetMission = useCallback(() => {
+    frameBufferRef.current = []
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current)
+      flushTimerRef.current = null
+    }
     setFrames([])
     setCycle(null)
     setApproval(null)
@@ -100,6 +109,8 @@ export function useMissionStream() {
     setLaunchTrack([])
     setMilestones([])
     setTimeline(EMPTY_TIMELINE)
+    setCriticReview(null)
+    setThoughts([])
     seqRef.current = null
   }, [])
 
@@ -128,6 +139,7 @@ export function useMissionStream() {
           setMission((m) => ({ ...m, running: true, phase: p.include_launch ? 'COUNTDOWN' : 'DEPLOYMENT' }))
           break
         case 'mission_stopped':
+          resetMission()
           setMission((m) => ({ ...m, running: false, phase: 'STOPPED' }))
           break
         case 'launch':
@@ -146,10 +158,26 @@ export function useMissionStream() {
           break
         case 'telemetry':
           seqRef.current = p.seq
-          setFrames((previous) => {
-            const next = [...previous, p]
-            return next.length > MAX_FRAMES ? next.slice(next.length - MAX_FRAMES) : next
-          })
+          frameBufferRef.current.push(p)
+          if (!flushTimerRef.current) {
+            flushTimerRef.current = setTimeout(() => {
+              flushTimerRef.current = null
+              const incoming = frameBufferRef.current
+              frameBufferRef.current = []
+              if (incoming.length > 0) {
+                setFrames((prev) => {
+                  const combined = prev.concat(incoming)
+                  return combined.length > MAX_FRAMES ? combined.slice(combined.length - MAX_FRAMES) : combined
+                })
+              }
+            }, 100) // smooth 10 Hz UI refresh window
+          }
+          break
+        case 'critic_review':
+          setCriticReview(p)
+          break
+        case 'agent_thought':
+          setThoughts((prev) => [p, ...prev].slice(0, 30))
           break
         case 'detection':
           setDetection(p)
@@ -345,6 +373,8 @@ export function useMissionStream() {
     milestones,
     timeline,
     reasoner,
+    criticReview,
+    thoughts,
     setApproval,
   }
 }

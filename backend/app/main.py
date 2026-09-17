@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import routes_control, routes_stages, routes_telemetry, ws
+from .api import routes_control, routes_intercept, routes_stages, routes_telemetry, ws
 from .bootstrap import Astrix
 from .config import get_settings
 from .services.mission_runner import MissionRunner
@@ -89,6 +89,7 @@ app.add_middleware(
 app.include_router(routes_telemetry.router)
 app.include_router(routes_stages.router)
 app.include_router(routes_control.router)
+app.include_router(routes_intercept.router)
 app.include_router(ws.router)
 
 

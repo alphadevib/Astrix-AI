@@ -87,9 +87,16 @@ function describe(event) {
   }
 }
 
-export function AgentActivity({ activity }) {
+// `fill` lets a parent (the sticky rail) size the feed instead of a fixed max height.
+export function AgentActivity({ activity, fill = false }) {
   return (
-    <Panel title="Agent activity" note={`${activity.length} events`} className="scroll" style={{ maxHeight: 620 }}>
+    <Panel
+      title="Agent activity"
+      note={`${activity.length} events`}
+      className="scroll activity-feed"
+      style={fill ? undefined : { maxHeight: 620 }}
+      accent="#199e70"
+    >
       {activity.length === 0 ? (
         <Empty>
           No activity yet. Start the mission to fly the launch; once ASTRIX is online, inject a
@@ -101,10 +108,7 @@ export function AgentActivity({ activity }) {
             const style = EVENT_STYLE[event.type] ?? { label: event.type.toUpperCase(), color: INK.muted }
             const detail = describe(event)
             return (
-              <div
-                key={`${event.at}-${index}`}
-                style={{ borderLeft: `2px solid ${style.color}`, paddingLeft: 9 }}
-              >
+              <div key={`${event.at}-${index}`} className="activity-item" style={{ '--event': style.color }}>
                 <div
                   className="mono"
                   style={{

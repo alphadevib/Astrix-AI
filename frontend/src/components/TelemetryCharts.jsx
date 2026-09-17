@@ -6,6 +6,7 @@
 // point wherever they like, which is to say it can imply any correlation at all.
 // Same-unit series share a chart; different units never do.
 
+import { useMemo } from 'react'
 import {
   CartesianGrid,
   Legend,
@@ -22,6 +23,14 @@ import { Panel } from './primitives'
 
 const HEIGHT = 168
 
+// Compact y-axis ticks (two or three significant figures), so small channels such as
+// pointing error (0.0455°) don't overflow the axis gutter.
+function tick(value) {
+  const abs = Math.abs(value)
+  if (abs >= 100 || Number.isInteger(value)) return String(Math.round(value))
+  return String(Number(value.toPrecision(abs < 1 ? 2 : 3)))
+}
+
 function clock(iso) {
   return new Date(iso).toLocaleTimeString([], { hour12: false, minute: '2-digit', second: '2-digit' })
 }
@@ -30,10 +39,10 @@ function Chart({ title, unit, data, series, domain, reference }) {
   return (
     <Panel title={title} note={unit}>
       <ResponsiveContainer width="100%" height={HEIGHT}>
-        <LineChart data={data} margin={{ top: 4, right: 12, bottom: 0, left: -18 }}>
+        <LineChart data={data} margin={{ top: 4, right: 12, bottom: 0, left: -8 }}>
           <CartesianGrid stroke={INK.grid} strokeDasharray="2 4" vertical={false} />
           <XAxis dataKey="t" {...axisProps} minTickGap={48} />
-          <YAxis {...axisProps} domain={domain ?? ['auto', 'auto']} width={46} />
+          <YAxis {...axisProps} domain={domain ?? ['auto', 'auto']} width={46} tickFormatter={tick} />
           <Tooltip {...tooltipStyle} />
           {series.length > 1 && (
             <Legend
@@ -77,7 +86,38 @@ function Chart({ title, unit, data, series, domain, reference }) {
 }
 
 export default function TelemetryCharts({ frames }) {
-  if (!frames?.length) {
+  // Hooks run before any early return: React requires the same hook order on
+  // every render, and frames go from empty to populated when a mission starts.
+  const data = useMemo(() => {
+    if (!frames?.length) return []
+    // If frames buffer is large, sample evenly for silky rendering performance
+    const step = frames.length > 120 ? Math.ceil(frames.length / 120) : 1
+    const sampled = []
+    for (let i = 0; i < frames.length; i += step) {
+      const frame = frames[i]
+      sampled.push({
+        t: clock(frame.timestamp),
+        soc: Number(frame.state_of_charge?.toFixed(1) ?? 0),
+        v_bat: Number(frame.battery_voltage?.toFixed(2) ?? 0),
+        solar: Number(frame.solar_power?.toFixed(1) ?? 0),
+        balance: Number(frame.power_balance?.toFixed(1) ?? 0),
+        temp: Number(frame.temperature?.toFixed(1) ?? 0),
+        temp2: Number(frame.temperature_secondary?.toFixed(1) ?? 0),
+        pointing: Number(frame.attitude_error_deg?.toFixed(3) ?? 0),
+        w1: Number(frame.wheel_1_vibration?.toFixed(2) ?? 0),
+        w2: Number(frame.wheel_2_vibration?.toFixed(2) ?? 0),
+        w3: Number(frame.wheel_3_vibration?.toFixed(2) ?? 0),
+        w4: Number(frame.wheel_4_vibration?.toFixed(2) ?? 0),
+        signal: Number(frame.communication_signal?.toFixed(1) ?? 0),
+        loss: Number(frame.packet_loss?.toFixed(1) ?? 0),
+        cpu: Number(frame.cpu_load?.toFixed(1) ?? 0),
+        mem: Number(frame.memory_usage?.toFixed(1) ?? 0),
+      })
+    }
+    return sampled
+  }, [frames])
+
+  if (!data.length) {
     return (
       <Panel title="Telemetry">
         <p className="empty">
@@ -87,22 +127,8 @@ export default function TelemetryCharts({ frames }) {
     )
   }
 
-  const data = frames.map((frame) => ({
-    t: clock(frame.timestamp),
-    soc: frame.state_of_charge,
-    solar: frame.solar_power,
-    balance: frame.power_balance,
-    temp: frame.temperature,
-    temp2: frame.temperature_secondary,
-    pointing: frame.attitude_error_deg,
-    w1: frame.wheel_1_vibration,
-    w2: frame.wheel_2_vibration,
-    w3: frame.wheel_3_vibration,
-    w4: frame.wheel_4_vibration,
-  }))
-
   return (
-    <div className="grid cols-2">
+    <div className="chart-grid">
       <Chart
         title="Reaction wheel vibration"
         unit="mm/s RMS · per wheel"
@@ -150,13 +176,33 @@ export default function TelemetryCharts({ frames }) {
         series={[{ key: 'soc', label: 'State of charge' }]}
         reference={{ value: 30, label: 'planning floor' }}
       />
-      <Panel title="Why these are separate charts" note="method note">
+      <Chart
+        title="Communications & Downlink"
+        unit="percent link quality & packet loss"
+        data={data}
+        domain={[0, 100]}
+        series={[
+          { key: 'signal', label: 'Signal Quality %' },
+          { key: 'loss', label: 'Packet Loss %', color: STATUS.critical },
+        ]}
+        reference={{ value: 65, label: 'link margin min', color: STATUS.warning }}
+      />
+      <Chart
+        title="Command & Data Handling"
+        unit="percent compute & memory load"
+        data={data}
+        domain={[0, 100]}
+        series={[
+          { key: 'cpu', label: 'CPU Load %' },
+          { key: 'mem', label: 'Memory %', color: SERIES[2] },
+        ]}
+        reference={{ value: 80, label: 'throttle threshold', color: STATUS.warning }}
+      />
+      <Panel title="Agentic Telemetry Correlation" note="Multi-Subsystem Analysis">
         <p className="small muted" style={{ lineHeight: 1.65, margin: 0 }}>
-          Each chart carries one unit. Vibration, pointing error, watts, degrees Celsius and percent
-          never share an axis, so nothing here can imply a correlation by scaling choice. Series that
-          do share a chart share a unit and are directly comparable — the four wheel traces above are
-          the clearest example: the degrading wheel separates from its three siblings on the same
-          scale, which is exactly the signature the Diagnostic Agent reasons about.
+          ASTRIX-AI monitors cross-channel signatures in real time. For instance, in thermal excursions,
+          the Diagnostic Agent checks if CPU load spiked; in thermal sensor faults, it cross-checks the
+          redundant sensor to detect instrumentation failures before executing costly power shutdowns.
         </p>
       </Panel>
     </div>

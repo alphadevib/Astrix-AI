@@ -5,27 +5,31 @@
 //
 // The categorical order below is fixed and never cycled. It is the validated
 // dark-mode order (blue, orange, aqua, yellow) — worst adjacent CVD ΔE 8.4,
-// worst adjacent normal-vision ΔE 19.8 against the #1a1a19 surface. Charts with
+// worst adjacent normal-vision ΔE 19.8 against a #1a1a19 surface (the current
+// #131419 panel surface is darker, so contrast only improves). Charts with
 // up to four series also carry direct end-labels as secondary encoding, so
 // identity never rests on hue alone. Do not add a fifth line series to a chart:
 // fold it into a second chart instead of inventing a hue.
 
 export const SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500']
 
-// Reserved. Never used as a series color.
+// Reserved. Never used as a series color. `nominal` is an alias of `good`.
 export const STATUS = {
   good: '#0ca30c',
+  nominal: '#0ca30c',
   warning: '#fab219',
   serious: '#ec835a',
   critical: '#d03b3b',
+  info: '#3987e5',
 }
 
-export const SURFACE = '#1a1a19'
+// Neutrals match the CSS tokens in index.css.
+export const SURFACE = '#131419'
 export const INK = {
-  primary: '#ffffff',
-  secondary: '#c3c2b7',
-  muted: '#8a8a80',
-  grid: '#2f2f2c',
+  primary: '#f3f4f6',
+  secondary: '#b8bcc6',
+  muted: '#7f8490',
+  grid: '#262830',
 }
 
 export const SEVERITY_COLOR = {
@@ -63,9 +67,10 @@ export const axisProps = {
 
 export const tooltipStyle = {
   contentStyle: {
-    background: '#232320',
-    border: '1px solid #3a3a36',
-    borderRadius: 6,
+    background: 'rgba(19, 20, 25, 0.96)',
+    border: '1px solid #363943',
+    borderRadius: 8,
+    boxShadow: '0 10px 30px -10px rgba(0,0,0,0.7)',
     fontSize: 12,
     color: INK.primary,
   },

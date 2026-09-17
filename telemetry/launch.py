@@ -76,6 +76,8 @@ class LaunchSnapshot:
     arrays_deployed: bool
     range_safety: str
     events: list[str] = field(default_factory=list)
+    is_abort: bool = False
+    fault_active: str | None = None
 
     def as_dict(self) -> dict:
         return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in self.__dict__.items()}
@@ -86,15 +88,22 @@ PITCH_EXPONENT = 1.65  # shape of the flight-path-angle schedule (tuned for 500 
 THROTTLE_BUCKET = (30.0, 75.0, 70.0)  # start, end, throttle % through max-Q
 
 
-def _acceleration(t: float) -> tuple[float, float]:
+def _acceleration(t: float, fault: str | None = None) -> tuple[float, float]:
     """(along-track acceleration m/s², throttle %) at `t` seconds after liftoff."""
     if t < 0.0 or MECO_S <= t < SES_S or t >= SECO_S:
         return 0.0, 0.0
+    if fault == "premature_meco" and t >= 75.0:
+        return 0.0, 0.0
     if t < MECO_S:
         start, end, bucket = THROTTLE_BUCKET
-        throttle = bucket if start <= t < end else 100.0
-        # Acceleration grows as stage 1 burns off propellant mass.
-        return (7.0 + 17.0 * t / MECO_S) * throttle / 100.0, throttle
+        if fault == "max_q_excursion":
+            throttle = 100.0  # failed throttle bucket excursion
+        else:
+            throttle = bucket if start <= t < end else 100.0
+        accel = (7.0 + 17.0 * t / MECO_S) * throttle / 100.0
+        if fault == "ascent_thrust_loss":
+            accel *= 0.68  # 32% thrust shortfall
+        return accel, throttle
     tau = (t - SES_S) / (SECO_S - SES_S)
     return 8.0 + 14.4 * tau, 100.0
 
@@ -128,12 +137,14 @@ def _dynamic_pressure_kpa(altitude_km: float, speed_ms: float) -> float:
 
 
 class LaunchProfile:
-    """Integrates the ascent in fixed sub-steps and reports each milestone exactly once."""
+    """Integrates the ascent with support for nominal flight and common ascent aborts."""
 
     SUB_STEP_S = 0.5
 
-    def __init__(self) -> None:
+    def __init__(self, fault: str | None = None) -> None:
         self.t = -COUNTDOWN_S
+        self.fault = fault
+        self.aborted = False
         self._speed_ms = 0.0
         self._altitude_km = 0.0
         self._downrange_km = 0.0
@@ -141,10 +152,13 @@ class LaunchProfile:
 
     @property
     def finished(self) -> bool:
+        if self.aborted and self.t >= 75.0 + 40.0:
+            return True
         return self.t >= END_S - 1e-9
 
-    @staticmethod
-    def phase_at(t: float) -> str:
+    def phase_at(self, t: float) -> str:
+        if self.aborted:
+            return "ASCENT_ABORT"
         if t < 0.0:
             return "COUNTDOWN"
         if t < SECO_S:
@@ -153,18 +167,26 @@ class LaunchProfile:
             return "ORBIT_INSERTION"
         return "DEPLOYMENT"
 
+    def inject_fault(self, fault_key: str) -> None:
+        self.fault = fault_key
+
     def step(self, dt: float) -> LaunchSnapshot:
         """Advance by `dt` seconds of mission time."""
         target = min(END_S, self.t + dt)
         while self.t < target - 1e-9:
             h = min(self.SUB_STEP_S, target - self.t)
-            if self.t >= SECO_S:
-                # Coasting in orbit: constant orbital speed, altitude held.
+            if self.fault == "premature_meco" and (self.t >= 75.0 - 1e-9 or self.t + h >= 75.0 - 1e-9):
+                self.aborted = True
+                # Ballistic recovery arc toward Atlantic splashdown
+                self._speed_ms = max(180.0, self._speed_ms - 22.0 * h)
+                self._altitude_km = max(0.0, self._altitude_km - 1.2 * h)
+                horizontal_ms = self._speed_ms * 0.8
+            elif self.t >= SECO_S:
                 self._speed_ms = ORBITAL_SPEED_KMS * 1000.0
                 self._altitude_km = TARGET_ALTITUDE_KM
                 horizontal_ms = self._speed_ms
             elif self.t >= 0.0:
-                self._speed_ms += _acceleration(self.t)[0] * h
+                self._speed_ms += _acceleration(self.t, self.fault)[0] * h
                 gamma = _flight_path_angle(self.t)
                 self._altitude_km += (
                     self._speed_ms * math.sin(gamma) * h / 1000.0 * _ALTITUDE_SCALE
@@ -172,12 +194,13 @@ class LaunchProfile:
                 horizontal_ms = self._speed_ms * math.cos(gamma)
             else:
                 horizontal_ms = 0.0
-            # Downrange is measured along the Earth's surface, not at altitude.
+
             self._downrange_km += (
-                horizontal_ms * h / 1000.0 * EARTH_RADIUS_KM / (EARTH_RADIUS_KM + self._altitude_km)
+                horizontal_ms * h / 1000.0 * EARTH_RADIUS_KM / (EARTH_RADIUS_KM + max(0.1, self._altitude_km))
             )
             self.t += h
-        if self.t >= SECO_S:
+
+        if not self.aborted and self.t >= SECO_S:
             self._altitude_km = TARGET_ALTITUDE_KM
             self._speed_ms = ORBITAL_SPEED_KMS * 1000.0
         return self.snapshot()
@@ -218,6 +241,12 @@ class LaunchProfile:
         ]
         self._emitted.update(events)
 
+        range_safety_status = "NOMINAL"
+        if self.aborted:
+            range_safety_status = f"ABORT: {self.fault.replace('_', ' ').upper()} — executing recovery"
+        elif warnings:
+            range_safety_status = "LIMIT: " + ", ".join(warnings)
+
         return LaunchSnapshot(
             t=t,
             phase=self.phase_at(t),
@@ -225,8 +254,8 @@ class LaunchProfile:
             altitude_km=self._altitude_km,
             downrange_km=self._downrange_km,
             speed_kms=speed_ms / 1000.0,
-            vertical_speed_kms=speed_ms * math.sin(gamma) / 1000.0 if t < SECO_S else 0.0,
-            flight_path_angle_deg=math.degrees(gamma),
+            vertical_speed_kms=speed_ms * math.sin(gamma) / 1000.0 if (t < SECO_S and not self.aborted) else (-0.8 if self.aborted else 0.0),
+            flight_path_angle_deg=math.degrees(gamma) if not self.aborted else -15.0,
             acceleration_g=g_load,
             dynamic_pressure_kpa=q_kpa,
             throttle_pct=throttle,
@@ -235,8 +264,10 @@ class LaunchProfile:
             fairing_attached=t < FAIRING_SEP_S,
             payload_attached=t < PAYLOAD_SEP_S,
             arrays_deployed=t >= ARRAYS_DEPLOYED_S,
-            range_safety="NOMINAL" if not warnings else "LIMIT: " + ", ".join(warnings),
+            range_safety=range_safety_status,
             events=events,
+            is_abort=self.aborted,
+            fault_active=self.fault,
         )
 
 

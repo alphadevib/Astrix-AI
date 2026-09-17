@@ -52,8 +52,9 @@ class ActionRequest(StageRequest):
     """Shared by /recovery/verify and /recovery/simulate."""
 
     frame: TelemetryFrame
-    diagnosis: Diagnosis
-    option: RecoveryOption
+    diagnosis: Diagnosis | None = None
+    option: RecoveryOption | None = None
+    action_id: str | None = None
 
 
 class LearnRequest(StageRequest):
@@ -80,4 +81,7 @@ class MissionStartRequest(StageRequest):
     )
     launch_time_scale: float = Field(
         default=20.0, ge=1.0, le=200.0, description="Simulated launch seconds per wall-clock second"
+    )
+    launch_fault: str | None = Field(
+        default=None, description="Optional launchpad failure mode: premature_meco, ascent_thrust_loss, max_q_excursion"
     )

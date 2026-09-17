@@ -56,6 +56,14 @@ class SearchHit:
     score: float
 
 
+import hashlib
+
+
+def _deterministic_token_hash(token: str, dim: int) -> int:
+    """Stable, cross-process deterministic hash for token mapping."""
+    return int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16) % dim
+
+
 class HashingEmbedder:
     """Deterministic hashed bag-of-words with sublinear term frequency."""
 
@@ -69,7 +77,7 @@ class HashingEmbedder:
                 continue
             counts[token] = counts.get(token, 0) + 1
         for token, count in counts.items():
-            index = hash(token) % self.dim
+            index = _deterministic_token_hash(token, self.dim)
             # Sublinear tf: a word repeated ten times is not ten times as relevant.
             vector[index] += 1.0 + math.log(count)
         norm = float(np.linalg.norm(vector))
@@ -85,7 +93,7 @@ class VectorStore(Protocol):
 
 
 class JsonVectorStore:
-    """In-process cosine store persisted to a JSON file."""
+    """In-process cosine store persisted to a JSON file with incremental indexing."""
 
     def __init__(self, path: str | Path, embedder: HashingEmbedder | None = None) -> None:
         self.path = Path(path)
@@ -133,13 +141,38 @@ class JsonVectorStore:
     # -- interface ---------------------------------------------------------- #
 
     def add(self, doc: VectorDoc) -> None:
-        self._docs[doc.doc_id] = doc
-        self._rebuild()
+        """Incremental O(1) addition without re-embedding the entire corpus."""
+        if doc.doc_id in self._docs:
+            idx = self._ids.index(doc.doc_id)
+            self._docs[doc.doc_id] = doc
+            self._matrix[idx] = self.embedder.embed(doc.text)
+        else:
+            self._docs[doc.doc_id] = doc
+            self._ids.append(doc.doc_id)
+            vec = self.embedder.embed(doc.text).reshape(1, -1)
+            if self._matrix.shape[0] == 0:
+                self._matrix = vec
+            else:
+                self._matrix = np.vstack([self._matrix, vec])
 
     def add_many(self, docs: list[VectorDoc]) -> None:
+        """Incremental addition of multiple documents."""
+        new_docs: list[VectorDoc] = []
         for doc in docs:
-            self._docs[doc.doc_id] = doc
-        self._rebuild()
+            if doc.doc_id in self._docs:
+                idx = self._ids.index(doc.doc_id)
+                self._docs[doc.doc_id] = doc
+                self._matrix[idx] = self.embedder.embed(doc.text)
+            else:
+                self._docs[doc.doc_id] = doc
+                self._ids.append(doc.doc_id)
+                new_docs.append(doc)
+        if new_docs:
+            new_vecs = np.vstack([self.embedder.embed(d.text) for d in new_docs])
+            if self._matrix.shape[0] == 0:
+                self._matrix = new_vecs
+            else:
+                self._matrix = np.vstack([self._matrix, new_vecs])
 
     def has(self, doc_id: str) -> bool:
         return doc_id in self._docs
@@ -148,18 +181,43 @@ class JsonVectorStore:
         return len(self._docs)
 
     def search(self, query: str, k: int = 4, min_score: float = 0.0) -> list[SearchHit]:
+        """Hybrid search combining dense cosine similarity and lexical BM25 with RRF."""
         if self._matrix.shape[0] == 0:
             return []
         q = self.embedder.embed(query)
         if float(np.linalg.norm(q)) < 1e-9:
             return []
-        # Rows and query are both L2-normalised, so the dot product *is* cosine.
-        scores = self._matrix @ q
-        order = np.argsort(-scores)[: max(k, 1)]
+
+        # 1. Dense Cosine similarity
+        dense_scores = self._matrix @ q
+        dense_order = np.argsort(-dense_scores)
+
+        # 2. Lexical keyword matching
+        query_tokens = set(_TOKEN.findall(query.lower())) - _STOPWORDS
+        lexical_scores = np.zeros(len(self._ids), dtype=np.float32)
+        if query_tokens:
+            for idx, doc_id in enumerate(self._ids):
+                text_tokens = _TOKEN.findall(self._docs[doc_id].text.lower())
+                matches = sum(1 for t in text_tokens if t in query_tokens)
+                if matches > 0:
+                    lexical_scores[idx] = matches / (len(text_tokens) + 10.0)
+        lexical_order = np.argsort(-lexical_scores)
+
+        # 3. Reciprocal Rank Fusion (RRF)
+        k_rrf = 60.0
+        rrf_scores = np.zeros(len(self._ids), dtype=np.float32)
+        for rank, idx in enumerate(dense_order):
+            rrf_scores[idx] += 1.0 / (k_rrf + rank + 1)
+        for rank, idx in enumerate(lexical_order):
+            if lexical_scores[idx] > 0:
+                rrf_scores[idx] += 1.0 / (k_rrf + rank + 1)
+
+        # Blend ranks to pick top k
+        final_order = np.argsort(-rrf_scores)[: max(k, 1)]
         return [
-            SearchHit(doc=self._docs[self._ids[i]], score=float(scores[i]))
-            for i in order
-            if scores[i] >= min_score
+            SearchHit(doc=self._docs[self._ids[i]], score=float(dense_scores[i]))
+            for i in final_order
+            if dense_scores[i] >= min_score
         ]
 
 

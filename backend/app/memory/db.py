@@ -196,13 +196,32 @@ class AuditRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+from sqlalchemy import event
+
+
+def _set_sqlite_pragmas(dbapi_connection, connection_record):
+    """Enable WAL mode, busy timeout, and normal sync for high-concurrency SQLite."""
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA busy_timeout=5000;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
+    except Exception:
+        pass
+    finally:
+        cursor.close()
+
+
 def build_engine(database_url: str):
     connect_args = {}
     if database_url.startswith("sqlite"):
         # The pipeline touches the session from the request thread and from the
         # background telemetry consumer.
         connect_args["check_same_thread"] = False
+        connect_args["timeout"] = 30.0
     engine = create_engine(database_url, connect_args=connect_args, future=True)
+    if database_url.startswith("sqlite"):
+        event.listen(engine, "connect", _set_sqlite_pragmas)
     return engine
 
 

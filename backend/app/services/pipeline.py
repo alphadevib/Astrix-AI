@@ -34,12 +34,14 @@ import uuid
 from dataclasses import dataclass, field
 from time import perf_counter
 
+from ..agents.critic import CriticAgent
 from ..agents.diagnostic import DiagnosticAgent
 from ..agents.learning import LearningAgent
 from ..agents.llm import AgentLLM
 from ..agents.recovery import RecoveryAgent
 from ..agents.resource import ResourceAgent
 from ..agents.risk import RiskAgent
+from ..memory.knowledge_graph import SpacecraftKnowledgeGraph
 from ..config import Settings
 from ..core.enums import (
     ApprovalStatus,
@@ -179,6 +181,8 @@ class AstrixPipeline:
         self.risk_agent = RiskAgent(llm)
         self.recovery_agent = RecoveryAgent(llm)
         self.learning_agent = LearningAgent(llm)
+        self.critic_agent = CriticAgent(getattr(llm, "gateway", None))
+        self.knowledge_graph = SpacecraftKnowledgeGraph()
 
         self._pending: dict[str, _PendingOutcome] = {}
         self._commands: dict[str, list[_Command]] = {}
@@ -395,12 +399,43 @@ class AstrixPipeline:
 
         result.anomaly_id = anomaly_id
 
-        # ---------------- Stage 2: diagnosis ---------------- #
+        # ---------------- Stage 2: diagnosis & multi-agent debate ---------------- #
         with timer.stage("diagnosis"):
             diagnosis = self.diagnostic_agent.run(frame, detection, recall)
             self.memory.attach_diagnosis(anomaly_id, diagnosis)
         result.diagnosis = diagnosis
         self.bus.publish("diagnosis", {"anomaly_id": anomaly_id, **diagnosis.model_dump(mode="json")})
+
+        # Multi-Agent Debate & Devil's Advocate Critic Review
+        with timer.stage("critic_debate"):
+            channels_with_scores = [
+                s.channel for s in getattr(detection, "scored_channels", []) if getattr(s, "anomaly_score", 0.0) > 0.25
+            ]
+            kg_explanation = self.knowledge_graph.explain_anomaly(
+                diagnosis.subsystem.value,
+                channels_with_scores,
+            )
+            critic_review = self.critic_agent.review(frame, diagnosis)
+            self.bus.publish(
+                "critic_review",
+                {"anomaly_id": anomaly_id, **critic_review.model_dump(mode="json")},
+            )
+            self.bus.publish(
+                "agent_thought",
+                {
+                    "anomaly_id": anomaly_id,
+                    "stage": "critic_debate",
+                    "subsystem": diagnosis.subsystem.value,
+                    "diagnosis": diagnosis.probable_cause,
+                    "confidence": critic_review.confidence_score,
+                    "confirmation_bias_detected": critic_review.confirmation_bias_detected,
+                    "sensor_spoofing_risk": critic_review.sensor_spoofing_risk,
+                    "consensus": critic_review.consensus_recommendation,
+                    "counter_arguments": critic_review.counter_arguments,
+                    "ruled_out": [h.model_dump() for h in critic_review.ruled_out_hypotheses],
+                    "knowledge_graph_explanation": kg_explanation,
+                },
+            )
 
         # ---------------- Stage 3: resources ---------------- #
         with timer.stage("resources"):
@@ -1019,32 +1054,33 @@ class AstrixPipeline:
     # ===================================================================== #
 
     def status(self) -> dict:
-        return {
-            "cycles": self.cycles,
-            "anomalies_opened": self.anomalies_opened,
-            "suppressed": self.suppressed_count,
-            "awaiting_approval": [
-                {
-                    "anomaly_id": anomaly_id,
-                    "action_id": p.option.action_id,
-                    "risk_level": p.option.risk_level.value,
-                    "description": p.option.description,
-                }
-                for anomaly_id, p in dict(self._awaiting_approval).items()
-            ],
-            "measuring_outcome": [
-                {
-                    "spacecraft_id": craft,
-                    "action_id": p.option.action_id,
-                    "evaluate_at_seq": p.evaluate_at_seq,
-                }
-                for craft, p in dict(self._pending).items()
-            ],
-            "detector_fitted": self.detector.is_fitted,
-            "detector_training_frames": self.detector.n_train,
-            "llm": self.llm.status,
-            "autonomy_limit": self.s.auto_execute_max_risk.value,
-        }
+        with self._lock:
+            return {
+                "cycles": self.cycles,
+                "anomalies_opened": self.anomalies_opened,
+                "suppressed": self.suppressed_count,
+                "awaiting_approval": [
+                    {
+                        "anomaly_id": anomaly_id,
+                        "action_id": p.option.action_id,
+                        "risk_level": p.option.risk_level.value,
+                        "description": p.option.description,
+                    }
+                    for anomaly_id, p in list(self._awaiting_approval.items())
+                ],
+                "measuring_outcome": [
+                    {
+                        "spacecraft_id": craft,
+                        "action_id": p.option.action_id,
+                        "evaluate_at_seq": p.evaluate_at_seq,
+                    }
+                    for craft, p in list(self._pending.items())
+                ],
+                "detector_fitted": self.detector.is_fitted,
+                "detector_training_frames": self.detector.n_train,
+                "llm": self.llm.status,
+                "autonomy_limit": self.s.auto_execute_max_risk.value,
+            }
 
     def pending_approvals(self) -> list[dict]:
         return self.status()["awaiting_approval"]

@@ -16,6 +16,7 @@ import asyncio
 
 from fastapi import APIRouter, HTTPException, status
 
+from ..agents.knowledge import ACTION_CATALOG
 from ..core.enums import Outcome
 from ..core.schemas import (
     ApprovalRequest,
@@ -23,6 +24,7 @@ from ..core.schemas import (
     DetectionResult,
     Diagnosis,
     MissionLearning,
+    RecoveryOption,
     RecoveryPlan,
     ResourceState,
     RiskAssessment,
@@ -152,10 +154,47 @@ async def generate(body: RecoveryGenerateRequest, pipeline: PipelineDep) -> Reco
 # --------------------------------------------------------------------------- #
 
 
+def _what_if(body: ActionRequest, rationale: str) -> tuple[RecoveryOption, Diagnosis]:
+    """Resolve the option and diagnosis for a stage call.
+
+    An n8n workflow passes a full `option` and `diagnosis`. The operator what-if
+    sandbox passes only an `action_id`; the option is then built from the verified
+    action catalogue, so its description, risk tier and subsystem are the
+    catalogue's, not guessed.
+    """
+    action_id = body.option.action_id if body.option else body.action_id
+    if action_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="provide either `option` or `action_id`",
+        )
+    spec = ACTION_CATALOG.get(action_id)
+    if body.option is None and spec is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"unknown action '{action_id}'; known actions: {', '.join(sorted(ACTION_CATALOG))}",
+        )
+    option = body.option or RecoveryOption(
+        action_id=spec.action_id,
+        description=spec.description,
+        risk_level=spec.risk_level,
+        expected_effect=spec.expected_effect,
+        rationale=rationale,
+    )
+    diagnosis = body.diagnosis or Diagnosis(
+        subsystem=spec.subsystem if spec else ACTION_CATALOG["enter_safe_mode"].subsystem,
+        probable_cause="What-if evaluation",
+        confidence=1.0,
+    )
+    return option, diagnosis
+
+
 @router.post("/recovery/simulate", response_model=SimulationResult, summary="Stage 7 — digital twin")
 async def simulate(body: ActionRequest, pipeline: PipelineDep) -> SimulationResult:
+    option, diagnosis = _what_if(body, "Operator what-if sandbox simulation")
     state = pipeline.resource_agent.run(body.frame)
-    return pipeline.twin.simulate(body.frame, state, body.option, body.diagnosis)
+    # Monte Carlo twin runs are CPU-bound; keep them off the event loop.
+    return await asyncio.to_thread(pipeline.twin.simulate, body.frame, state, option, diagnosis)
 
 
 @router.post("/recovery/verify", response_model=SafetyVerdict, summary="Stage 8 — safety verification")
@@ -166,13 +205,14 @@ async def verify(body: ActionRequest, pipeline: PipelineDep, simulate_first: boo
     twin, then final verdict including SR-005). Set it false to see the
     state-only pre-check in isolation.
     """
+    option, diagnosis = _what_if(body, "Operator what-if sandbox verification")
     state = pipeline.resource_agent.run(body.frame)
     simulation = (
-        pipeline.twin.simulate(body.frame, state, body.option, body.diagnosis)
+        await asyncio.to_thread(pipeline.twin.simulate, body.frame, state, option, diagnosis)
         if simulate_first
         else None
     )
-    return pipeline.safety.check(body.frame, state, body.option, body.diagnosis, simulation)
+    return pipeline.safety.check(body.frame, state, option, diagnosis, simulation)
 
 
 # --------------------------------------------------------------------------- #

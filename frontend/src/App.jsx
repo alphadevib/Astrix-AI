@@ -1,74 +1,61 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import AppShell from './components/AppShell'
+import InterceptLab from './pages/InterceptLab'
 import MissionControl from './pages/MissionControl'
 import MissionMemory from './pages/MissionMemory'
-import { Pill, fmt } from './components/primitives'
 import useMissionStream from './services/useMissionStream'
-import { SERIES, STATUS } from './theme'
 
-const TABS = [
-  { key: 'control', label: 'Mission Control' },
-  { key: 'memory', label: 'Mission Memory' },
+const PAGES = [
+  {
+    key: 'control',
+    label: 'Mission Control',
+    short: 'Control',
+    description: 'Live spacecraft, the ASTRIX loop and recovery decisions',
+  },
+  {
+    key: 'intercept',
+    label: 'Intercept Check',
+    short: 'Intercept',
+    description: 'Trajectory check, fault and cyber-attack analysis',
+  },
+  {
+    key: 'memory',
+    label: 'Mission Memory',
+    short: 'Memory',
+    description: 'Knowledge profile, lessons, anomaly history and audit trail',
+  },
 ]
 
+// Hash routing keeps the current page across reloads and makes pages linkable
+// without adding a router dependency.
+function pageFromHash() {
+  const key = window.location.hash.replace(/^#\/?/, '')
+  return PAGES.some((p) => p.key === key) ? key : 'control'
+}
+
 export default function App() {
-  const [tab, setTab] = useState('control')
+  const [page, setPage] = useState(pageFromHash)
   const stream = useMissionStream()
-  const { connected, reasoner, pipeline, mission, latest } = stream
+
+  useEffect(() => {
+    const onHash = () => {
+      setPage(pageFromHash())
+      window.scrollTo({ top: 0 })
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  useEffect(() => {
+    const current = PAGES.find((p) => p.key === page)
+    document.title = `${current.label} · ASTRIX`
+  }, [page])
 
   return (
-    <div className="app">
-      <header className="header">
-        <div className="brand">
-          <h1>ASTRIX</h1>
-          <span className="tagline">Detect. Reason. Recover. Learn.</span>
-        </div>
-
-        <div className="header-right">
-          <Pill color={mission?.phase === 'FAILED' ? STATUS.critical : mission?.running ? STATUS.good : '#8a8a80'}>
-            {mission?.running ? fmt.title(mission.phase).toLowerCase() : mission?.phase === 'FAILED' ? 'runner failed' : 'mission stopped'}
-          </Pill>
-          <Pill
-            color={reasoner.llm ? SERIES[0] : '#8a8a80'}
-            title={reasoner.reason ?? 'LLM reasoning active'}
-          >
-            {reasoner.label}
-          </Pill>
-          <Pill color={SERIES[2]}>autonomy ≤ {pipeline?.autonomy_limit ?? '—'}</Pill>
-          {pipeline?.suppressed > 0 && (
-            <Pill color="#8a8a80">{pipeline.suppressed} suppressed</Pill>
-          )}
-          <Pill color={connected ? STATUS.good : STATUS.critical}>
-            {connected ? 'live' : 'reconnecting'}
-          </Pill>
-        </div>
-      </header>
-
-      {!reasoner.llm && reasoner.reason && (
-        <p className="small muted" style={{ margin: '-6px 4px 12px', lineHeight: 1.5 }}>
-          Running on deterministic reasoners — {reasoner.reason}. Detection, the safety engine, the
-          digital twin and mission memory are unaffected; only the agents' natural-language reasoning
-          falls back to rules.
-        </p>
-      )}
-
-      <nav className="tabs" role="tablist">
-        {TABS.map((entry) => (
-          <button
-            key={entry.key}
-            className="tab"
-            role="tab"
-            aria-selected={tab === entry.key}
-            onClick={() => setTab(entry.key)}
-          >
-            {entry.label}
-          </button>
-        ))}
-        <span style={{ marginLeft: 'auto', alignSelf: 'center' }} className="small muted">
-          {latest ? `${latest.spacecraft_id} · ${latest.mission_id} · frame ${latest.seq}` : 'no telemetry'}
-        </span>
-      </nav>
-
-      {tab === 'control' ? <MissionControl stream={stream} /> : <MissionMemory />}
-    </div>
+    <AppShell pages={PAGES} current={page} stream={stream}>
+      {page === 'control' && <MissionControl stream={stream} />}
+      {page === 'intercept' && <InterceptLab />}
+      {page === 'memory' && <MissionMemory />}
+    </AppShell>
   )
 }

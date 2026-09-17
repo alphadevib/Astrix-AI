@@ -27,6 +27,7 @@ const apiPaths = [
   '/status',
   '/health',
   '/events',
+  '/intercept',
 ]
 
 export default defineConfig({

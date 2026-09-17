@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from .enums import (
     ApprovalStatus,
@@ -245,18 +245,31 @@ class RiskAssessment(AstrixModel):
 class ResourceState(AstrixModel):
     """What the spacecraft can still afford to spend (§8.6)."""
 
-    state_of_charge: float
-    power_margin_w: float
-    fuel_level: float
+    state_of_charge: float = 80.0
+    power_margin_w: float = 150.0
+    fuel_level: float = 80.0
     operational_wheels: list[int] = Field(
-        default_factory=list, description="Wheels currently spinning and commandable"
+        default_factory=lambda: [1, 2, 3, 4], description="Wheels currently spinning and commandable"
     )
     healthy_wheels: list[int] = Field(
-        default_factory=list, description="Operational wheels showing no degradation signature"
+        default_factory=lambda: [1, 2, 3, 4], description="Operational wheels showing no degradation signature"
     )
     thermal_headroom_c: float = 0.0
     cpu_headroom: float = 0.0
     link_available: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _handle_aliases_and_types(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "battery_soc" in data and "state_of_charge" not in data:
+                data["state_of_charge"] = data["battery_soc"]
+            data.pop("spacecraft_id", None)
+            if "operational_wheels" in data and isinstance(data["operational_wheels"], int):
+                data["operational_wheels"] = list(range(1, data["operational_wheels"] + 1))
+            if "healthy_wheels" in data and isinstance(data["healthy_wheels"], int):
+                data["healthy_wheels"] = list(range(1, data["healthy_wheels"] + 1))
+        return data
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -278,12 +291,25 @@ class ResourceState(AstrixModel):
 class RecoveryOption(AstrixModel):
     action_id: str
     description: str
-    risk_level: RiskLevel
+    risk_level: RiskLevel = RiskLevel.GREEN
     rationale: str = ""
     expected_effect: str = ""
     historical_success_rate: float | None = None
     score: float = 0.0
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_risk_level(cls, data: Any) -> Any:
+        if isinstance(data, dict) and ("risk_level" not in data or data["risk_level"] is None):
+            action_id = data.get("action_id")
+            try:
+                from ..agents.knowledge import ACTION_CATALOG
+                if action_id and action_id in ACTION_CATALOG:
+                    data["risk_level"] = ACTION_CATALOG[action_id].risk_level
+            except Exception:
+                pass
+        return data
 
 
 class RecoveryPlan(AstrixModel):
@@ -361,6 +387,13 @@ class SimulationResult(AstrixModel):
             "fix the fault still passes."
         ),
     )
+    probabilistic_confidence: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Monte Carlo confidence probability that the recovery remains within safe envelopes.",
+    )
+    monte_carlo_runs: int = Field(default=50, description="Number of stochastic Monte Carlo runs executed.")
 
     @computed_field  # type: ignore[prop-decorator]
     @property
