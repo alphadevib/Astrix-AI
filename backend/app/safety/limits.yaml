@@ -1,0 +1,73 @@
+# ASTRIX safety limits and constraint thresholds.
+#
+# Master context §31: thresholds must be configurable, never hard-coded in a
+# decision path. Everything the safety engine and the digital twin compare
+# against lives in this file, so a flight-rule change is a config change and is
+# reviewable as a diff.
+#
+# Units: temperatures °C, power W, state of charge %, angles degrees, time seconds.
+
+limits:
+  # --- power ---
+  battery_soc_critical: 15.0        # below this: no non-essential high-power actions
+  battery_soc_floor: 30.0           # planning floor through eclipse
+  battery_soc_reconfig_min: 30.0    # minimum SOC to accept a reconfiguration transient
+  power_margin_min_w: -60.0         # sustained draw worse than this is not acceptable
+
+  # --- thermal ---
+  temperature_critical: 55.0        # above this: no actions that add thermal load
+  temperature_warning: 46.0
+  thermal_headroom_min: 2.0
+
+  # --- attitude ---
+  min_operational_wheels: 3         # 3-axis control requires three wheels
+  pointing_error_limit_deg: 0.50    # science pointing budget
+  pointing_error_safe_deg: 2.00     # vehicle-safety limit, not a science limit
+  attitude_settling_seconds: 45.0   # a reconfiguration transient must settle within this
+
+  # --- propulsion ---
+  fuel_reserve_percent: 5.0
+
+  # --- communications ---
+  signal_quality_min: 60.0
+  packet_loss_max: 10.0
+
+# Actions whose execution meaningfully raises power draw. Prohibited outright
+# below battery_soc_critical.
+high_power_actions:
+  - propulsion_maneuver
+  - switch_redundant_wheel_config
+  - restart_wheel_3
+
+# Actions that raise thermal load. Prohibited above temperature_critical.
+thermal_load_actions:
+  - propulsion_maneuver
+  - restart_wheel_3
+  - switch_redundant_wheel_config
+
+# Actions that are irreversible and therefore always require human approval,
+# regardless of their nominal risk tier.
+irreversible_actions:
+  - permanent_subsystem_shutdown
+
+# Pre-approved onboard safe responses (master context §5, fast path). These are
+# the only actions permitted when the ground link is unavailable: they change
+# observability or data handling, never spacecraft configuration.
+link_loss_permitted_actions:
+  - increase_monitoring_rate
+  - prioritize_telemetry
+  - switch_data_processing_mode
+  - reduce_downlink_rate
+  - enter_safe_mode                # safing must remain available without a link
+
+simulation:
+  horizon_seconds: 60
+  step_seconds: 1.0
+  thermal_tau_seconds: 200.0
+  battery_capacity_wh: 480.0
+  checks:
+    attitude_stable_limit_deg: 0.50
+    battery_soc_min: 30.0
+    temperature_max: 55.0
+    signal_min: 60.0
+    min_operational_wheels: 3

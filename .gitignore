@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.env
+.pytest_cache/
+.ruff_cache/
+
+# generated artefacts
+data/astrix.db
+data/vector_store.json
+data/models/*.joblib
+data/telemetry/*.jsonl
+data/telemetry/*.csv
+
+# frontend
+node_modules/
+dist/
+
+# evaluation output
+*.log

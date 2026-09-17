@@ -1,0 +1,29 @@
+# n8n workflow orchestration for ASTRIX.
+#
+#   docker compose up -d        # start  -> http://localhost:5678
+#   docker compose logs -f n8n  # follow logs
+#   docker compose down         # stop (workflows persist in the n8n_data volume)
+#
+# From inside n8n, services on this machine are NOT at localhost:
+#   Ollama       http://host.docker.internal:11434
+#   ASTRIX API   http://host.docker.internal:8000
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: astrix-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - TZ=Asia/Kolkata
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_DIAGNOSTICS_ENABLED=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

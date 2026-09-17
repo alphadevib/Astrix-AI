@@ -1,0 +1,138 @@
+"""Composition root.
+
+Everything is constructed here, once, and handed to the pipeline. No module
+reaches for a global; if a component needs the detector or the memory store, it
+is given one. That is what makes the stages individually testable and lets n8n
+drive them out of order without surprises.
+
+Detector training happens at startup if no model file exists: the simulator
+generates several orbits of fault-free telemetry and the Isolation Forest fits on
+it. Training on the *simulator* rather than on live frames is deliberate — a
+detector trained on whatever happens to be arriving would learn the fault as
+normal.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+from .agents.llm import AgentLLM
+from .config import Settings, get_settings
+from .memory.db import build_session_factory, init_db
+from .memory.seed import seed_all
+from .memory.store import MissionMemory
+from .memory.vector import build_vector_store
+from .ml.context import ContextScorer
+from .ml.detector import AnomalyDetector
+from .safety.engine import SafetyEngine
+from .services.buffer import TelemetryBuffer
+from .services.bus import EventBus
+from .services.pipeline import AstrixPipeline
+from .simulation.twin import DigitalTwin
+
+log = logging.getLogger(__name__)
+
+
+class Astrix:
+    """Container for every long-lived ASTRIX component."""
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        self.settings = settings or get_settings()
+        s = self.settings
+
+        # ---------- memory ----------
+        self.engine = init_db(s.database_url)
+        self.session_factory = build_session_factory(self.engine)
+        self.vectors = build_vector_store(s.vector_backend, s.vector_path)
+        self.memory = MissionMemory(self.session_factory, self.vectors)
+        seeded = seed_all(self.session_factory, self.vectors)
+        log.info(
+            "mission memory ready (structured seeded=%s, documents added=%d, total documents=%d)",
+            seeded["structured_seeded"],
+            seeded["documents_added"],
+            self.vectors.count(),
+        )
+
+        # ---------- detection ----------
+        self.detector = self._load_or_train_detector()
+        self.scorer = ContextScorer(s)
+
+        # ---------- safety and simulation ----------
+        self.safety = SafetyEngine(auto_execute_max_risk=s.auto_execute_max_risk)
+        self.twin = DigitalTwin(self.safety.simulation_config)
+
+        # ---------- reasoning ----------
+        self.llm = AgentLLM(s)
+        if self.llm.available:
+            log.info("agent reasoning: LLM enabled (%s)", s.llm_model)
+        else:
+            log.warning(
+                "agent reasoning: DETERMINISTIC only — %s", self.llm.status["reason"]
+            )
+
+        # ---------- orchestration ----------
+        self.buffer = TelemetryBuffer(maxlen=s.telemetry_window)
+        self.bus = EventBus()
+        self.pipeline = AstrixPipeline(
+            settings=s,
+            detector=self.detector,
+            scorer=self.scorer,
+            memory=self.memory,
+            safety=self.safety,
+            twin=self.twin,
+            llm=self.llm,
+            buffer=self.buffer,
+            bus=self.bus,
+        )
+
+        # Set by main.py once the app owns an event loop.
+        self.runner = None
+
+    # ------------------------------------------------------------------ #
+
+    def _load_or_train_detector(self) -> AnomalyDetector:
+        path = Path(self.settings.detector_path)
+        if path.exists():
+            try:
+                detector = AnomalyDetector.load(path)
+                log.info("loaded anomaly detector from %s (%d training frames)", path, detector.n_train)
+                return detector
+            except (ValueError, KeyError, EOFError) as exc:
+                log.warning("stored detector unusable (%s); retraining", exc)
+
+        detector = AnomalyDetector(contamination=self.settings.detector_contamination)
+        try:
+            from telemetry.simulator import generate_nominal_frames
+        except ImportError as exc:
+            log.error(
+                "cannot train the detector: the telemetry simulator is not importable (%s). "
+                "Run uvicorn from the repository root so `telemetry` is on sys.path. "
+                "ASTRIX will start, but detection will report 'untrained'.",
+                exc,
+            )
+            return detector
+
+        count = self.settings.detector_train_frames
+        log.info("training anomaly detector on %d fault-free frames (first run only)...", count)
+        frames = generate_nominal_frames(count)
+        # Calibrated on a separate orbit (different noise seed): thresholds set on
+        # the training data itself understate how far healthy telemetry wanders.
+        validation = generate_nominal_frames(self.settings.detector_validation_frames, seed=11)
+        detector.fit(frames, validation=validation)
+        detector.save(self.settings.detector_path)
+        log.info("detector trained and saved to %s", self.settings.detector_path)
+        return detector
+
+    def health(self) -> dict:
+        return {
+            "app": self.settings.app_name,
+            "tagline": self.settings.tagline,
+            "detector_fitted": self.detector.is_fitted,
+            "detector_training_frames": self.detector.n_train,
+            "llm": self.llm.status,
+            "memory": self.memory.stats(),
+            "autonomy_limit": self.settings.auto_execute_max_risk.value,
+            "vector_backend": self.settings.vector_backend,
+            "database": self.settings.database_url.split("://")[0],
+        }
