@@ -8,21 +8,25 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import sign_in
+
 
 @pytest.fixture
 def client(tmp_path):
     os.environ["ASTRIX_DATABASE_URL"] = f"sqlite:///{(tmp_path / 'api.db').as_posix()}"
     os.environ["ASTRIX_VECTOR_PATH"] = str(tmp_path / "vectors.json")
+    os.environ["ASTRIX_CORPUS_PATH"] = str(tmp_path / "corpus" / "corpus.db")
     from backend.app.config import get_settings
 
     get_settings.cache_clear()
     from backend.app.main import app
 
     with TestClient(app) as test_client:
+        sign_in(test_client)
         yield test_client
         test_client.post("/mission/stop")
     get_settings.cache_clear()
-    for key in ("ASTRIX_DATABASE_URL", "ASTRIX_VECTOR_PATH"):
+    for key in ("ASTRIX_DATABASE_URL", "ASTRIX_VECTOR_PATH", "ASTRIX_CORPUS_PATH"):
         os.environ.pop(key, None)
 
 

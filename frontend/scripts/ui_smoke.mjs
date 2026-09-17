@@ -55,8 +55,12 @@ page.on('console', (message) => {
 page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`))
 
 try {
-  await page.goto(url, { waitUntil: 'networkidle' })
-  await page.getByRole('heading', { name: 'ASTRIX', exact: true }).waitFor()
+  // The results notice is acknowledged once per session; pre-acknowledge it so
+  // the dialog does not cover the controls this script clicks.
+  await page.goto(`${url}/app#/assurance`, { waitUntil: 'networkidle' })
+  await page.evaluate(() => sessionStorage.setItem('astrix.noticeAcknowledged.v1', '1'))
+  await page.reload({ waitUntil: 'networkidle' })
+  await page.getByRole('heading', { name: 'Overview' }).waitFor()
   // A stopped mission must still render the view rather than a blank panel.
   await page.locator('canvas.mission-canvas').waitFor()
   await shoot(page, '01-idle')

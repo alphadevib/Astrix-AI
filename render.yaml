@@ -1,0 +1,26 @@
+# One-click backend on Render (Blueprint). The console itself deploys to Vercel.
+services:
+  - type: web
+    name: astrix-api
+    runtime: docker
+    plan: starter
+    healthCheckPath: /meta
+    disk:
+      name: astrix-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: ASTRIX_API_TOKEN
+        generateValue: true
+      - key: ASTRIX_CORPUS_KEY
+        sync: false # paste a Fernet key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - key: ASTRIX_CORS_ORIGIN_REGEX
+        value: https://.*\.vercel\.app
+      - key: ASTRIX_LLM_PROVIDER
+        value: auto
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false

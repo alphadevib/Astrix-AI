@@ -1,4 +1,8 @@
-// The mission-control screen.
+// Flight Assurance — spacecraft anomaly testing before and after launch.
+//
+// Fly an ascent (reference or a Vehicle Studio design, nominal or with a launch
+// fault), then inject on-orbit faults and watch ASTRIX detect, diagnose, plan,
+// verify and recover.
 //
 // Reading order top to bottom is the loop's own order: what the spacecraft is
 // doing, then what ASTRIX detected, then what it concluded, then what it
@@ -25,14 +29,14 @@ import WhatIfSandbox from '../components/WhatIfSandbox'
 import AgentThoughtInspector from '../components/AgentThoughtInspector'
 
 const SECTIONS = [
-  { key: 'overview', label: 'Overview', description: 'Mission state, the live view and the ASTRIX loop' },
+  { key: 'overview', label: 'Overview', description: 'Test setup, the live flight view and the ASTRIX loop' },
   { key: 'telemetry', label: 'Telemetry', description: 'Subsystem channels against their limits' },
   { key: 'analysis', label: 'Analysis', description: 'Detection, memory recall, diagnosis and risk' },
   { key: 'recovery', label: 'Recovery', description: 'Candidate actions, twin simulation and safety verification' },
   { key: 'learning', label: 'Learning', description: 'Measured outcome and lessons written to memory' },
 ]
 
-export default function MissionControl({ stream }) {
+export default function FlightAssurance({ stream, vehicle }) {
   const { frames, latest, cycle, activity, approval, learning, outcome, mission, criticReview, thoughts, detection } =
     stream
   const [error, setError] = useState(null)
@@ -70,11 +74,11 @@ export default function MissionControl({ stream }) {
 
   return (
     <>
-      <nav className="section-nav" aria-label="Mission control sections">
+      <nav className="section-nav" aria-label="Flight assurance sections">
         {SECTIONS.map((section) => (
           <a
             key={section.key}
-            href={`#/control`}
+            href={`#/assurance`}
             className={`section-link ${active === section.key ? 'active' : ''}`}
             onClick={(event) => {
               event.preventDefault()
@@ -104,7 +108,7 @@ export default function MissionControl({ stream }) {
       <div className={wide ? 'mc-layout' : undefined}>
         <div style={{ minWidth: 0 }}>
           <Section section={SECTIONS[0]} index={1}>
-            <MissionControls mission={mission} onError={setError} />
+            <MissionControls mission={mission} onError={setError} vehicle={vehicle} />
             <MissionTheater stream={stream} />
             {latest && <Vitals frame={latest} resources={cycle?.resources} />}
             <Panel

@@ -88,7 +88,7 @@ function PhaseBanner({ phase, launch, latest, mission }) {
 
 function LaunchSide({ launch, milestones, phase }) {
   const reached = new Set(milestones.map((m) => m.key))
-  const all = LAUNCH_TIMELINE
+  const all = launch?.vehicle?.milestones?.length ? launch.vehicle.milestones : LAUNCH_TIMELINE
   return (
     <div className="grid" style={{ gap: 12 }}>
       <div className="mini-tiles">
@@ -106,8 +106,11 @@ function LaunchSide({ launch, milestones, phase }) {
       </div>
 
       <div>
-        <Bar label="Stage 1 propellant" value={launch?.stage1_propellant_pct ?? 100} color={SERIES[0]} />
-        <Bar label="Stage 2 propellant" value={launch?.stage2_propellant_pct ?? 100} color={SERIES[1]} />
+        {(launch?.stage_propellant_pct?.length ? launch.stage_propellant_pct : [launch?.stage1_propellant_pct ?? 100, launch?.stage2_propellant_pct ?? 100]).map(
+          (value, i) => (
+            <Bar key={i} label={`Stage ${i + 1} propellant`} value={value} color={SERIES[i % SERIES.length]} />
+          ),
+        )}
       </div>
 
       <div className="small" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -117,13 +120,18 @@ function LaunchSide({ launch, milestones, phase }) {
         <Pill color={INK.muted}>anomaly detection engages in orbit</Pill>
       </div>
 
+      {launch?.vehicle?.custom && (
+        <p className="small muted" style={{ margin: 0 }}>
+          Flying Studio design <strong>{launch.vehicle.name}</strong> with {launch.vehicle.payload_name}.
+        </p>
+      )}
       <ol className="milestones">
         {all.map((m) => {
           const done = reached.has(m.key)
           return (
             <li key={m.key} className={done ? 'done' : ''}>
               <span className="mono tick">{done ? '✓' : '·'}</span>
-              <span className="mono when">{m.t < 0 ? `T${m.t}` : `T+${m.t}`}</span>
+              <span className="mono when">{m.t < 0 ? `T${Math.round(m.t)}` : `T+${Math.round(m.t)}`}</span>
               <span>{m.title}</span>
             </li>
           )

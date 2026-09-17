@@ -73,6 +73,7 @@ class SpacecraftSimulator:
         dt: float = 1.0,
         seed: int | None = 42,
         start: datetime | None = None,
+        satellite: dict | None = None,
     ) -> None:
         self.spacecraft_id = spacecraft_id
         self.mission_id = mission_id
@@ -81,6 +82,15 @@ class SpacecraftSimulator:
         self.t = 0.0
         self.seq = 0
         self.epoch = start or datetime.now(timezone.utc)
+
+        # Custom satellite designs change the power budget relative to the
+        # reference bus. Telemetry stays normalised to the reference bus (the
+        # detector was trained on it), so a well-sized design flies reference
+        # telemetry and an undersized array or battery shows up as a deficit.
+        from telemetry.vehicles import telemetry_factors
+
+        self.satellite_name = (satellite or {}).get("name") or spacecraft_id
+        self.factors = telemetry_factors(satellite)
 
         # --- integrated state ---
         self.soc = 92.0
@@ -182,11 +192,11 @@ class SpacecraftSimulator:
             self.scenario.apply(f, self.scenario.progress(elapsed), elapsed)
 
         # --- power ---
-        solar = 0.0 if eclipse else 236.0 * (0.92 + 0.08 * math.cos(2 * math.pi * phase))
+        solar = 0.0 if eclipse else 236.0 * self.factors["solar"] * (0.92 + 0.08 * math.cos(2 * math.pi * phase))
         solar = max(0.0, solar + rng.gauss(0, 2.0))
-        load = BASE_LOAD_W + f.extra_load_w
+        load = BASE_LOAD_W * self.factors["base_load"] + f.extra_load_w
         if payload:
-            load += PAYLOAD_LOAD_W
+            load += PAYLOAD_LOAD_W * self.factors["payload_load"]
         if comms:
             load += COMMS_LOAD_W
         if maneuvering:
@@ -202,7 +212,7 @@ class SpacecraftSimulator:
         current = net_w / voltage  # + charging, - discharging
 
         drain = f.soc_drain_multiplier if net_w < 0 else 1.0
-        self.soc += (net_w * drain * dt / 3600.0) / BATTERY_CAPACITY_WH * 100.0
+        self.soc += (net_w * drain * dt / 3600.0) / (BATTERY_CAPACITY_WH * self.factors["battery"]) * 100.0
         self.soc = min(100.0, max(2.0, self.soc))
 
         # --- thermal (first-order lag toward a load/sun-driven target) ---

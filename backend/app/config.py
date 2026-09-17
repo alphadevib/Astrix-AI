@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     app_name: str = "Astrix-AI"
     tagline: str = "Detect. Reason. Recover. Learn."
     api_base: str = "http://127.0.0.1:8000"
+    # Comma-separated or JSON list. Deployments add their Vercel domain here.
     cors_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
@@ -46,20 +47,63 @@ class Settings(BaseSettings):
             "http://localhost:3000",
         ]
     )
+    # Regex for preview deployments, e.g. r"https://.*\.vercel\.app"
+    cors_origin_regex: str | None = None
+    # ---------- accounts ----------
+    # The console is account-gated: every request that is not sign-in, sign-up or
+    # a liveness probe must carry a session bearer token from `/auth/login`.
+    require_auth: bool = True
+    # How long a session stays valid without being used. Each authenticated
+    # request slides the expiry forward.
+    session_ttl_hours: int = 720
+    # Set false once the intended operators have accounts, to close sign-up on a
+    # public deployment.
+    allow_registration: bool = True
+    # Optional machine credential for automation (n8n workflows, CI) that cannot
+    # hold an interactive session. It is never shown in, or entered through, the UI.
+    api_token: str | None = None
 
     # ---------- agent reasoning (multi-model gateway) ----------
     llm_enabled: bool = True
-    llm_provider: str = "auto"  # "auto", "anthropic", "gemini", "groq", "openai", "local"
-    llm_model: str = "claude-3-7-sonnet-20250219"
-    llm_fast_model: str = "claude-3-5-haiku-20241022"
+    # "auto" or a key from agents/providers.py: gemini, groq, huggingface, local.
+    # Providers whose keys never answered were removed from the registry rather
+    # than left in the picker as dead options.
+    llm_provider: str = "auto"
+    llm_model: str = "gemini-flash-latest"
+    llm_fast_model: str = "gemini-flash-lite-latest"
     llm_max_tokens: int = 4096
     llm_timeout_seconds: float = 30.0
     gemini_api_key: str | None = None
-    openai_api_key: str | None = None
     groq_api_key: str | None = None
-    openai_api_base: str = "https://api.openai.com/v1"
+    huggingface_api_key: str | None = None
     local_model_url: str = "http://localhost:11434/v1"
     thinking_budget_tokens: int = 1024
+
+    # ---------- Astrix-LM training corpus ----------
+    # Verified agent decisions are captured, encrypted at rest (Fernet) and
+    # hash-chained for tamper evidence, then used to train Astrix's own models.
+    corpus_enabled: bool = True
+    corpus_path: str = str(DATA_DIR / "corpus" / "astrix_corpus.db")
+    # Base64 Fernet key. If unset a key file is generated next to the corpus;
+    # production deployments should inject this from a secret manager instead.
+    corpus_key: str | None = None
+    # Retrain the on-box nano model after this many new examples (0 = manual only).
+    corpus_auto_train_every: int = 40
+    # Capture an end-of-mission summary — every anomaly, recovery and outcome in
+    # one narrative example — so Astrix-LM learns mission-level patterns, not just
+    # frame-level ones.
+    mission_summaries_enabled: bool = True
+    # A frame whose anomaly matches no catalogued failure mode is still captured,
+    # tagged `novel`, and answered from learned mission history rather than
+    # discarded as "unclassified".
+    open_world_diagnosis: bool = True
+    # Similarity below which a detected anomaly counts as novel (nothing in the
+    # catalogue or in mission memory looks like it).
+    novelty_similarity_threshold: float = 0.42
+
+    # ---------- hardware-in-the-loop ----------
+    # Readings older than this stop overriding simulated telemetry.
+    hardware_stale_seconds: float = 5.0
 
     # ---------- memory ----------
     database_url: str = f"sqlite:///{(DATA_DIR / 'astrix.db').as_posix()}"

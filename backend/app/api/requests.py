@@ -85,3 +85,6 @@ class MissionStartRequest(StageRequest):
     launch_fault: str | None = Field(
         default=None, description="Optional launchpad failure mode: premature_meco, ascent_thrust_loss, max_q_excursion"
     )
+    vehicle: dict | None = Field(
+        default=None, description="Optional Vehicle Studio design (telemetry.vehicles.VehicleDesign) to fly"
+    )

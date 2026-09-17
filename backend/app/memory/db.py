@@ -179,6 +179,85 @@ class LessonRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class UserRow(Base):
+    """An operator account.
+
+    Only a verifiable derivation of the password is ever stored: `password_hash`
+    holds a PBKDF2-HMAC-SHA256 digest with a per-user random salt (see
+    `auth/passwords.py`). There is no code path that can recover the plaintext,
+    and the column is never serialised into an API response.
+    """
+
+    __tablename__ = "user_account"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    organisation: Mapped[str] = mapped_column(String(160), default="")
+    role: Mapped[str] = mapped_column(String(64), default="flight-director")
+    password_hash: Mapped[str] = mapped_column(String(256))
+    # Per-user console preferences (default reasoner, notice acknowledgement...).
+    preferences: Mapped[dict] = mapped_column(JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Reset when the password changes, which invalidates every live session.
+    password_changed_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class SessionRow(Base):
+    """A live sign-in.
+
+    The bearer token itself is never stored — only its SHA-256 — so a dump of
+    this table cannot be replayed against the API. Sign-out and password changes
+    delete rows, which is what makes revocation immediate.
+    """
+
+    __tablename__ = "user_session"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("user_account.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_agent: Mapped[str] = mapped_column(String(256), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class ConversationRow(Base):
+    """One thread with Astrix, owned by exactly one account."""
+
+    __tablename__ = "conversation"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("user_account.id"), index=True)
+    title: Mapped[str] = mapped_column(String(160), default="New conversation")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    messages: Mapped[list["MessageRow"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan"
+    )
+
+
+class MessageRow(Base):
+    __tablename__ = "conversation_message"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversation.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(16))
+    content: Mapped[str] = mapped_column(Text, default="")
+    # Result cards, reasoner attribution and navigation hints travel with the turn
+    # so a reloaded conversation renders exactly as it did live.
+    extra: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    conversation: Mapped[ConversationRow] = relationship(back_populates="messages")
+
+
 class AuditRow(Base):
     """Append-only record of every verification decision (§9).
 

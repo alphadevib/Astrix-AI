@@ -1,0 +1,7 @@
+# Optional: fine-tune a generative Astrix-LM from the exported corpus.
+# A CUDA GPU is strongly recommended (Colab/Kaggle free tiers work for 0.5B models).
+torch>=2.3
+transformers>=4.44
+peft>=0.12
+datasets>=2.20
+accelerate>=0.33

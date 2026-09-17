@@ -30,6 +30,7 @@ def make_settings(tmp_path: Path) -> Settings:
     return Settings(
         database_url=f"sqlite:///{(tmp_path / 'astrix.db').as_posix()}",
         vector_path=str(tmp_path / "vectors.json"),
+        corpus_path=str(tmp_path / "corpus" / "corpus.db"),
         llm_enabled=False,
     )
 
@@ -39,3 +40,27 @@ def astrix(tmp_path: Path):
     instance = Astrix(make_settings(tmp_path))
     yield instance
     instance.engine.dispose()
+
+
+# The console is account-gated, so an API test has to be somebody. This registers
+# a throwaway operator against the client's own (temporary) database and pins the
+# session token onto the client, so every later request in that test is signed in.
+TEST_ACCOUNT = {
+    "email": "test-operator@astrix.test",
+    "password": "orbital-drift-7741",
+    "name": "Test Operator",
+}
+
+
+def sign_in(test_client):
+    """Register-or-sign-in the test operator and authorise `test_client`."""
+    response = test_client.post("/auth/register", json=TEST_ACCOUNT)
+    if response.status_code == 409:  # module-scoped client, already registered
+        response = test_client.post(
+            "/auth/login",
+            json={"email": TEST_ACCOUNT["email"], "password": TEST_ACCOUNT["password"]},
+        )
+    response.raise_for_status()
+    token = response.json()["token"]
+    test_client.headers["Authorization"] = f"Bearer {token}"
+    return token

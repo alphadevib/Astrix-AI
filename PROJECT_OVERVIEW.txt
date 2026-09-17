@@ -1,0 +1,249 @@
+================================================================================
+ASTRIX-AI: AUTONOMOUS SPACECRAFT INTELLIGENCE & EXECUTION
+Comprehensive Project Documentation, Architecture, Technologies, Features,
+Drawbacks, and Future Scope
+================================================================================
+
+1. EXECUTIVE OVERVIEW & PHILOSOPHY
+--------------------------------------------------------------------------------
+Astrix-AI is an end-to-end, autonomous spacecraft mission operations and flight
+intelligence platform built upon the operational doctrine:
+            "DETECT. REASON. RECOVER. LEARN."
+
+Space missions operating in Low Earth Orbit (LEO), Medium Earth Orbit (MEO), 
+and Deep Space face severe operational challenges:
+  - Intermittent ground station contact windows (often only 10-15 minutes per 90-minute orbit).
+  - Round-trip communication latencies (ranging from seconds in LEO to minutes/hours in deep space).
+  - High telemetry dimensionality (hundreds of interdependent physical and electrical sensors).
+  - Catastrophic failure velocity: mechanical jams, thermal excursions, or power bus sags 
+    can cripple a spacecraft before ground operators even receive the anomaly telemetry packet.
+
+Astrix-AI addresses this vulnerability by moving autonomous diagnostic, safety, 
+simulation, and recovery execution on-board (or to edge ground stations). It simulates 
+and flies an Earth-observation satellite from launch countdown through multi-stage 
+ascent to orbit, monitors real-time telemetry, detects anomalies using calibrated 
+hybrid machine learning, isolates root causes via multi-agent cognitive reasoning, 
+validates proposed recoveries against safety rules and a Digital Twin with Monte Carlo 
+probabilistic modeling, executes safe actions autonomously (or holds for operator approval), 
+measures empirical physical outcomes, and persists new lessons into mission memory.
+
+
+2. SYSTEM ARCHITECTURE & PIPELINE
+--------------------------------------------------------------------------------
+The core execution engine is organized as an eight-stage closed-loop pipeline:
+
+  [ Stage 0: Telemetry Ingestion & Validation ]
+       │  High-frequency validation, circular ring buffering, persistence tracking,
+       │  and raw sensor frame logging.
+       ▼
+  [ Stage 1: Hybrid Anomaly Detection & Context Scoring ]
+       │  Fast-path Isolation Forest + Mode-conditioned extreme-value scoring.
+       │  Context-aware multi-factor risk weighting and false-alarm suppression.
+       ▼
+  [ Stage 2: Multi-Agent Diagnosis & Knowledge Graph / Critic Debate ]
+       │  Diagnostic Agent identifies probable cause and subsystem.
+       │  Spacecraft Knowledge Graph maps failure propagation paths.
+       │  Devil's Advocate Critic Agent challenges confirmation bias and sensor spoofing.
+       ▼
+  [ Stage 3: Spacecraft Resource Assessment ]
+       │  Resource Agent tallies battery reserves, power balance, thermal margin,
+       │  actuator health, and consumable propellant budgets.
+       ▼
+  [ Stage 4: Risk Evaluation ]
+       │  Risk Agent computes operational severity (GREEN, YELLOW, ORANGE, RED),
+       │  collateral risk, and urgency horizons.
+       ▼
+  [ Stage 5: Recovery Planning ]
+       │  Recovery Agent formulates ranked, candidate recovery procedures.
+       ▼
+  [ Stage 6 & 7: Digital Twin Simulation & Deterministic Safety Verification ]
+       │  Physics-based lumped subsystem simulation integrated over 60s horizon.
+       │  50-run stochastic Monte Carlo perturbation analysis (confidence envelope).
+       │  Deterministic limit checking against vehicle flight constraints (limits.yaml).
+       │  Candidate options tested in ranked order until one fully clears verification.
+       ▼
+  [ Stage 8: Execution / Escalation & Outcome Evaluation ]
+       │  Autonomous command queuing if risk is within autonomy limits (GREEN).
+       │  Human-in-the-loop escalation with full audit trail for elevated risk.
+       │  Post-execution empirical outcome measurement over evaluation window.
+       ▼
+  [ Stage 9: Mission Learning & Precedent Memory ]
+          Learning Agent reviews actual physical response vs. predicted twin trajectory;
+          synthesizes actionable findings and persists into relational and vector stores.
+
+
+3. TECHNOLOGY STACK
+--------------------------------------------------------------------------------
+A. Backend & API Services:
+   - Python 3.11+: Core execution runtime.
+   - FastAPI: High-performance asynchronous REST API and WebSockets server.
+   - Pydantic v2 & Pydantic-Settings: Strict runtime data validation, schema enforcement,
+     and environment-driven configuration.
+   - Uvicorn: Lightning-fast ASGI production web server.
+   - HTTPX: Connection-pooled asynchronous HTTP networking.
+
+B. Machine Learning & Numerical Computing:
+   - Scikit-Learn: Base Isolation Forest and StandardScaler models, with custom
+     pre-cached Cython tree traversal (`tree_.apply`) for high-throughput single-sample
+     real-time inference (~1.0 ms/frame; >940 frames/sec).
+   - NumPy & SciPy: Vectorized matrix computations, multi-channel statistical calibration,
+     numerical ODE integration for orbital and attitude dynamics, and vectorized Monte Carlo
+     normal distributions.
+   - Joblib: Model serialization, persistence, and pipeline management.
+
+C. Spacecraft Physics & Telemetry Simulator:
+   - Custom Numerical Physics Engine (`telemetry/`): Simulates orbital Keplerian propagation,
+     reaction wheel rotational dynamics, bearing friction and vibration harmonics, 
+     solar panel incidence and eclipse lighting, multi-node thermal conduction/radiation,
+     lithium-ion battery charge/discharge curves, and communications link margin.
+   - Multi-stage Launch Profile: Simulates booster ignition, liftoff, max-Q, stage separation,
+     fairing jettison, circularization burn, payload separation, and solar array deployment.
+
+D. Memory, Knowledge Representation & Storage:
+   - SQLite & SQLAlchemy: Structured operational database recording telemetry frames,
+     anomaly lifecycle events, recovery actions, and complete audit logs.
+   - Vector Store (JsonVectorStore / ChromaDB): Lexical Hashing Bag-of-Words and dense
+     hybrid retrieval with BM25 keyword matching and Reciprocal Rank Fusion (RRF).
+   - Spacecraft Knowledge Graph: Subsystem ontological model built on NetworkX to map
+     cross-subsystem dependencies and fault cascade pathways (e.g., thermal -> CDH -> power).
+
+E. Multi-Model LLM Gateway:
+   - Tiered Routing & Automated Fallback: Intelligently routes between fast triage (<100ms)
+     and deep cognitive diagnosis.
+   - Providers Supported:
+       * Google Gemini (Gemini 2.0 Flash / Pro)
+       * Anthropic Claude (Claude 3.7 Sonnet with extended thinking budget, Claude 3.5 Haiku)
+       * Groq (Llama 3.3 70B Versatile, Llama 3.1 8B Instant)
+       * OpenAI (GPT-4o, GPT-4o-mini)
+       * Local Air-Gapped Models via Ollama (Qwen 2.5/3, Llama 3)
+   - Zero-Key Deterministic Fallback: Fully functional deterministic rule and knowledge
+     reasoners when no external API credentials are provided.
+
+F. Frontend & Mission Control Dashboard:
+   - React 18, Vite, TypeScript: Modern reactive web user interface.
+   - Tailwind CSS & Lucide Icons: Spacecraft mission control UI styling.
+   - Recharts & HTML5 2D Canvas: Real-time multi-channel telemetry strip-charts,
+     orbital trajectory map, spacecraft attitude display, and launch ascent checklist.
+   - WebSockets: Real-time bidirectional telemetry streaming and event broadcasting.
+
+G. Testing & Quality Assurance:
+   - Pytest & Pytest-Asyncio: Comprehensive end-to-end and unit test suite.
+   - Automated Detection Evaluation Suite (`scripts/evaluate_detection.py`):
+     Deterministic multi-orbit nominal soak testing and fault injection scoreboard.
+
+
+4. CORE FEATURES & INNOVATIONS
+--------------------------------------------------------------------------------
+1. Calibrated Hybrid Anomaly Detection:
+   - Overcomes the fundamental limitation of standard Isolation Forests, which saturate
+     on single-channel excursions (e.g., a pinned 100% CPU load scores low isolation).
+   - Combines Isolation Forest (detects multivariate correlation anomalies) with a
+     mode-conditioned extreme-value score (detects single-channel excursions).
+   - Per-mode statistical envelopes (NOMINAL, PAYLOAD_ACTIVE, ECLIPSE, COMMS_PASS,
+     MANEUVER, SAFE_MODE) calibrate nominal thresholds per operating phase.
+
+2. Context-Aware False Alarm Suppression:
+   - Raw ML scores alone cause alarm fatigue in traditional mission control.
+   - Astrix-AI computes a multi-factor risk score:
+       Final = w1(ML) + w2(Context Deviation) + w3(Subsystem Correlation)
+             + w4(History) + w5(Persistence) + w6(Mission Impact)
+   - Automatically suppresses uncorroborated single-sensor spikes (e.g., benign thermal
+     transients) while escalating corroborated systemic degradation.
+
+3. Cognitive Multi-Agent Debate & Devil's Advocate Critic:
+   - Diagnostic Agent formulates hypotheses based on telemetry and historical precedents.
+   - Critic Agent acts as an adversarial Devil's Advocate to actively check for confirmation
+     bias, rule out alternative explanations, and flag sensor spoofing/instrumentation failures.
+   - Knowledge Graph provides topological explanations of physical failure mechanisms.
+
+4. Physics-Based Digital Twin with Monte Carlo Verification:
+   - Proposes recovery actions are never blindly executed.
+   - Forward integrates spacecraft lumped dynamics across a 60-second predictive horizon.
+   - Simultaneously runs a "do-nothing" baseline to verify that the recovery does not leave
+     the spacecraft worse off than inaction.
+   - Executes a 50-run stochastic Monte Carlo perturbation sweep (varying solar flux,
+     bearing friction, and sensor noise) to compute a probabilistic containment confidence.
+
+5. Dynamic Ranked Verification:
+   - "AI proposes, deterministic constraints verify." If the top-ranked recovery action
+     violates flight rules or fails simulation checks, the pipeline automatically steps
+     down to candidate #2, candidate #3, etc., until a verifiably safe action is found.
+
+6. Tiered Autonomy & Human-in-the-Loop Safeguards:
+   - Routine, low-risk actions (GREEN) within the autonomy ceiling are executed autonomously.
+   - High-consequence or irreversible actions (YELLOW/RED) trigger an operator approval
+     hold, displaying the exact simulation trajectory, rationale, and rule evaluations.
+   - Operator approvals re-verify actions against real-time telemetry before transmission.
+
+7. Empirical Learning & Mission Memory:
+   - Measures actual physical telemetry over post-recovery observation windows.
+   - Synthesizes findings and stores structured records and vector embeddings for future
+     lexical/semantic recall during similar anomalies.
+
+
+5. LIMITATIONS & DRAWBACKS
+--------------------------------------------------------------------------------
+1. Lumped Dynamics Simulation Fidelity:
+   - The on-board Digital Twin uses simplified 1D/lumped differential models (thermal tau,
+     battery capacity, single-axis momentum redistribution) to maintain sub-second latency.
+   - It does not replace full 6-DOF (Degrees of Freedom) orbital perturbation solvers,
+     finite element thermal models, or high-fidelity magnetic field interaction engines.
+
+2. Latency & Dependency on External LLMs:
+   - Cloud-based LLMs (Gemini, Claude, GPT-4o) introduce network latency (200ms to 2.5s)
+     and depend on Internet connectivity, which is incompatible with air-gapped flight
+     computers unless running local quantized models (e.g., via Ollama).
+   - While Astrix-AI handles this via deterministic fallback, the semantic depth of
+     reasoning is superior when generative models are available.
+
+3. Stochastic Non-Determinism in Generative Agents:
+   - Generative LLM responses can exhibit slight linguistic or structural variance across runs.
+   - Although strict Pydantic JSON schemas and deterministic safety gates constrain the
+     output, high-criticality flight software certification (e.g., NASA Class A / DO-178C)
+     traditionally requires strictly deterministic execution paths.
+
+4. Baseline Environmental Assumptions:
+   - The Anomaly Detector is trained on nominal on-orbit flight profiles. Unprecedented space
+     weather events (e.g., intense solar particle events, coronal mass ejections, or severe
+     radiation upsets) could cause wide-distribution telemetry shifts that initially resemble
+     spacecraft hardware faults.
+
+5. Simulated Ground-Spacecraft Interface:
+   - The current communication channel simulates packet loss, signal degradation, and downlink
+     latencies, but does not implement raw CCSDS (Consultative Committee for Space Data Systems)
+     packet framing, telecommand encryption (AES-GCM), or Doppler shift tracking.
+
+
+6. SCOPE OF FUTURE WORK & ROADMAP
+--------------------------------------------------------------------------------
+1. Edge Deployment on Radiation-Hardened Hardware:
+   - Quantization and compilation of detection and local reasoning models (using ONNX Runtime,
+     TensorRT, or TinyML) targeting space-grade processors (e.g., Vorago ARM Cortex, BAE RAD750,
+     or Xilinx Versal Space Grade SoCs).
+
+2. High-Fidelity 6-DOF Orbital & Attitude Dynamics:
+   - Upgrading the Digital Twin simulation to incorporate J2/J4 gravitational harmonics,
+     atmospheric drag in low LEO orbits, solar radiation pressure (SRP), and 3-axis
+     quaternion attitude kinematics.
+
+3. Multi-Satellite Constellation & Swarm Coordination:
+   - Extending the architecture to autonomous satellite swarms and constellations.
+   - Inter-satellite link (ISL) communication enabling collaborative cross-spacecraft anomaly
+     diagnosis (e.g., distinguishing regional space weather from vehicle-specific failure).
+
+4. Formal Verification & Standards Compliance:
+   - Integrating formal mathematical verification for safety rules (e.g., SMT solvers like Z3).
+   - Compliance with CCSDS standards (Telecommand, Telemetry, and Space Packet Protocol)
+     and ECSS (European Cooperation for Space Standardization) software standards.
+
+5. Reinforcement Learning for Adaptive Fault Recovery:
+   - Integrating model-based reinforcement learning (MBRL) to discover novel, non-intuitive
+     recovery trajectories when redundant subsystems have suffered multiple compounding failures.
+
+6. Hardware-in-the-Loop (HIL) Testbed Integration:
+   - Connecting the Astrix-AI pipeline to physical CubeSat flat-sats, microcontroller boards,
+     and hardware attitude testbeds with real reaction wheels, sun sensors, and IMUs.
+
+================================================================================
+END OF DOCUMENTATION — ASTRIX-AI
+================================================================================

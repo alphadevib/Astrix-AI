@@ -18,13 +18,14 @@ const LAUNCH_SPEEDS = [
   { value: 60, label: '60× (~10 s)' },
 ]
 
-export function MissionControls({ mission, onError }) {
+export function MissionControls({ mission, onError, vehicle }) {
   const [scenarios, setScenarios] = useState([])
   const [scenario, setScenario] = useState('wheel_degradation')
   const [interval, setIntervalValue] = useState(0.35)
   const [includeLaunch, setIncludeLaunch] = useState(true)
   const [launchScale, setLaunchScale] = useState(20)
   const [launchFault, setLaunchFault] = useState('none')
+  const [useDesign, setUseDesign] = useState(Boolean(vehicle))
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -63,7 +64,7 @@ export function MissionControls({ mission, onError }) {
   }
 
   return (
-    <Panel title="Mission control" note={note}>
+    <Panel title="Test setup" note={note}>
       <div className="control-row">
         {running ? (
           <button className="btn" disabled={busy} onClick={() => guard(api.stopMission)}>
@@ -81,6 +82,7 @@ export function MissionControls({ mission, onError }) {
                   include_launch: includeLaunch,
                   launch_time_scale: Number(launchScale),
                   launch_fault: launchFault === 'none' ? null : launchFault,
+                  vehicle: useDesign && vehicle ? vehicle : null,
                 }),
               )
             }
@@ -88,6 +90,22 @@ export function MissionControls({ mission, onError }) {
             {includeLaunch ? 'Launch mission' : 'Start in orbit'}
           </button>
         )}
+
+        <label className="field">
+          vehicle
+          <select
+            value={useDesign && vehicle ? 'studio' : 'reference'}
+            disabled={running}
+            onChange={(event) => setUseDesign(event.target.value === 'studio')}
+          >
+            <option value="reference">Reference ASTRIX-LV</option>
+            {vehicle && (
+              <option value="studio">
+                Studio: {vehicle.rocket.name} + {vehicle.satellite.name}
+              </option>
+            )}
+          </select>
+        </label>
 
         <label className="field">
           <input

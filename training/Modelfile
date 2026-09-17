@@ -1,0 +1,14 @@
+# Serve a fine-tuned Astrix-LM through Ollama.
+#
+#   1. python scripts/train_astrix_lm.py --data astrix-lm-sft.jsonl --out training/astrix-lm
+#   2. Convert the merged model to GGUF with llama.cpp:
+#        python convert_hf_to_gguf.py training/astrix-lm/merged --outfile training/astrix-lm.gguf --outtype q8_0
+#   3. ollama create astrix-lm -f training/Modelfile
+#   4. In the console: Reasoner -> Local (Ollama) -> astrix-lm
+
+FROM ./astrix-lm.gguf
+
+PARAMETER temperature 0.1
+PARAMETER num_ctx 4096
+
+SYSTEM """You are Astrix-LM, a spacecraft fault-management model. Given detection context from on-board telemetry, return the diagnosis, risk and recovery decision as JSON. Your output is advisory and must pass the deterministic safety engine before execution."""

@@ -7,6 +7,8 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import sign_in
+
 from backend.app.agents.knowledge import ACTION_CATALOG
 from backend.app.core.schemas import TelemetryFrame
 
@@ -37,6 +39,7 @@ def client(tmp_path_factory):
     from backend.app.main import app
 
     with TestClient(app) as test_client:
+        sign_in(test_client)
         yield test_client
     get_settings.cache_clear()
     for key in ("ASTRIX_DATABASE_URL", "ASTRIX_VECTOR_PATH"):

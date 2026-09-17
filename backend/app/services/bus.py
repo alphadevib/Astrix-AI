@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -30,6 +31,7 @@ class EventBus:
         self._subscribers: set[asyncio.Queue] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._recent: list[dict[str, Any]] = []
+        self._taps: list[tuple[frozenset[str], Callable[[str, Any], None]]] = []
 
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -51,6 +53,15 @@ class EventBus:
     def recent(self, limit: int = 50) -> list[dict[str, Any]]:
         return self._recent[-limit:]
 
+    def tap(self, event_types: set[str] | frozenset[str], handler: Callable[[str, Any], None]) -> None:
+        """Call `handler(event_type, payload)` synchronously for matching events.
+
+        Taps run in the publishing thread, before WebSocket dispatch, so they
+        see every event even with no browser connected. A failing tap is logged
+        and never interrupts the decision loop.
+        """
+        self._taps.append((frozenset(event_types), handler))
+
     # -- publication -------------------------------------------------------- #
 
     def publish(self, event_type: str, payload: Any) -> None:
@@ -62,6 +73,13 @@ class EventBus:
         if event_type not in HIGH_RATE_EVENTS:
             self._recent.append(event)
             del self._recent[:-200]
+
+        for types, handler in self._taps:
+            if event_type in types:
+                try:
+                    handler(event_type, payload)
+                except Exception:  # noqa: BLE001
+                    log.exception("event tap failed for '%s'", event_type)
 
         loop = self._loop
         if loop is not None and loop.is_running():

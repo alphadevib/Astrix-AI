@@ -20,6 +20,86 @@ Groq (free tier), OpenAI, and local offline models via Ollama. No API key is str
 without one, every agent falls back to its deterministic reasoner seamlessly. The
 detection, safety, simulation, ontological knowledge graph and memory layers are identical either way.
 
+> **Results are hypothetical.** Astrix-AI runs on simulated spacecraft, first-order
+> launch, intercept and vehicle models, and advisory AI reasoning. Every result must be
+> verified against real-time prototypes, hardware-in-the-loop tests and uploaded flight
+> or test data before it informs any engineering or operational decision. The console
+> shows this notice on every page and the API returns it in an `X-Astrix-Notice` header.
+
+---
+
+## What's in the workspace
+
+| Area | What it does |
+|---|---|
+| **Landing page** (`/`) | Public overview. Lightweight, and loads no console code. |
+| **Astrix** (`/app#/assistant`) | Chat-style home. Say *launch mission*, *inject wheel degradation*, *approve*, *design a 3-stage rocket for a 400 kg satellite to 700 km*, *run an intercept check with seeker dropout*, *inject brownout on hardware*, *train model*, *use groq*. Commands run through the same verified services as the buttons. Free-form questions go to the active reasoner. |
+| **Flight Assurance** | Spacecraft anomaly testing before and after launch: fly the ascent (reference or custom vehicle, nominal or with a launch fault), then inject on-orbit faults and watch the detect → recover → learn loop. |
+| **Intercept Lab** | Missile trajectory testing: pre-flight GO/NO-GO, predicted intercept point and miss distance, then vehicle faults or cyber attacks during the engagement. |
+| **Vehicle Studio** | Design rockets (1–4 stages) and satellites by hand, from presets or from a plain-English prompt. It reports Δv, T/W, loss budget, orbit margin and power budget, previews the ascent, and flies the design in the 2D launch panel. Undersized vehicles abort; they never get an orbit they did not earn. |
+| **Hardware Link** | Arduino prototypes in the loop over Web Serial (or the built-in emulator): live sensors, commands, and on-chip fault injection. Readings perturb the orbiting spacecraft, and recovery actions drive real actuators. See [hardware/README.md](hardware/README.md). |
+| **Astrix-LM** | Captures verified decisions in an encrypted, hash-chained corpus, trains Astrix's own nano model (shadow-scored against live decisions), and exports JSONL to LoRA fine-tune a small open LLM that runs through Ollama (`scripts/train_astrix_lm.py`). |
+| **Mission Memory** | Knowledge profile, lessons, anomaly history and audit trail. |
+
+## Reasoners (free LLM providers)
+
+Every agent works without an LLM. Add any key below to the backend environment and pick
+the provider from the reasoner menu in the console's top bar, or set `ASTRIX_LLM_PROVIDER`.
+The gateway tries the active provider first, falls back through every other configured one,
+pauses a provider for 60 s after repeated failures, and finally uses the deterministic reasoners.
+
+| Provider | Env var | Free tier (Sept 2026, check before relying on it) | Default model |
+|---|---|---|---|
+| Google Gemini | `GEMINI_API_KEY` | Free Flash tier, no card | `gemini-2.5-flash` |
+| Groq | `GROQ_API_KEY` | ~30 req/min, ~1k req/day | `llama-3.3-70b-versatile` |
+| OpenRouter | `OPENROUTER_API_KEY` | `:free` models, ~50 req/day | `meta-llama/llama-3.3-70b-instruct:free` |
+| Mistral | `MISTRAL_API_KEY` | Experiment plan (opt in to data use) | `mistral-small-latest` |
+| Cohere | `COHERE_API_KEY` | Trial key, non-commercial | `command-a-03-2025` |
+| Hugging Face | `HF_TOKEN` | Small monthly credit | `meta-llama/Llama-3.3-70B-Instruct` |
+| Cloudflare Workers AI | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` | 10k Neurons/day | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| NVIDIA NIM | `NVIDIA_API_KEY` | Developer credits | `meta/llama-3.3-70b-instruct` |
+| Cerebras | `CEREBRAS_API_KEY` | Trial credit | `llama-3.3-70b` |
+| Local Ollama | none | Unlimited, offline | `qwen3:8b` (also `llama3.2:3b`, `gemma3:4b`, `phi4-mini`, `astrix-lm`, …) |
+| Anthropic / OpenAI | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Paid | `claude-sonnet-5` / `gpt-4o` |
+
+Override any default model with `ASTRIX_<PROVIDER>_MODEL`, e.g. `ASTRIX_GROQ_MODEL=qwen/qwen3-32b`.
+Keys stay on the server and are never sent to the browser.
+
+## Deploy: console on Vercel, API in a container
+
+The console is static and deploys to Vercel. The backend holds a long-running simulator
+and WebSockets, which Vercel functions cannot host, so it runs as a container
+(Render, Fly.io, Railway, Cloud Run or a VM).
+
+**Backend**
+
+```bash
+docker build -t astrix-api .
+docker run -p 8000:8000 \
+  -e ASTRIX_API_TOKEN=<long random string> \
+  -e ASTRIX_CORPUS_KEY=<Fernet key> \
+  -e ASTRIX_CORS_ORIGIN_REGEX='https://.*\.vercel\.app' \
+  -e GROQ_API_KEY=... -v astrix-data:/app/data astrix-api
+```
+
+Generate the Fernet key with
+`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+On Render, `render.yaml` is a ready Blueprint. The image trains the anomaly detector at
+build time, so containers cold-start in seconds.
+
+**Console**
+
+1. Import the repo in Vercel and set **Root Directory** to `frontend`. `frontend/vercel.json`
+   configures the build, the `/app` rewrite, immutable asset caching and security headers.
+2. Set `VITE_API_BASE=https://your-api.example.com` (build-time), or leave it empty and enter
+   the backend URL and API token in the console's **Settings** dialog.
+
+Performance: the landing page ships ~14 kB gzipped of JS. The console, each lab and the chart
+library are separate lazily loaded chunks, and the API gzips responses over 1 kB.
+
+Security: set `ASTRIX_API_TOKEN` on any public backend. Every POST/PUT/PATCH/DELETE then needs
+`Authorization: Bearer <token>`. Set `ASTRIX_CORPUS_KEY` from a secret manager.
+
 ---
 
 ## Quick start
@@ -102,7 +182,7 @@ uncorroborated deviation outright.
 ## Tests
 
 ```bash
-python -m pytest tests -q                 # launch profile, loop logic, runner and API
+python -m pytest tests -q                 # launch, vehicles, loop, runner, hardware, corpus, assistant, API
 python scripts/run_scenario.py --no-llm   # one full loop, headless, end to end
 node frontend/scripts/ui_smoke.mjs                 # dashboard in a real browser (needs both servers)
 ```
@@ -117,10 +197,14 @@ backend/app/
   simulation/  digital twin used to test plans before execution
   memory/      structured (SQL) and vector mission memory
   services/    the loop (pipeline), mission runner, telemetry buffer, event bus
-  api/         REST + WebSocket surface
-telemetry/     spacecraft simulator, fault scenarios, launch profile
-frontend/      React mission-control dashboard (2D mission view, charts, panels)
-scripts/       scenario runner, detection evaluation, local-model test
+  hardware/    HIL hub (calibration, overlay, command allow-list) and serial bridge
+  training/    encrypted hash-chained corpus and the Astrix-LM nano model
+  api/         REST + WebSocket surface, assistant, vehicles, hardware, model
+telemetry/     spacecraft simulator, fault scenarios, launch profile, vehicle designs
+frontend/      landing page + React console (assistant, labs, 2D views, charts)
+hardware/      Arduino HIL firmware and wiring guide
+training/      Ollama Modelfile for a fine-tuned Astrix-LM
+scripts/       scenario runner, detection evaluation, LoRA fine-tuning
 ```
 
 ## Configuration

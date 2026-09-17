@@ -1,4 +1,4 @@
-// Interceptor trajectory check.
+// Intercept Lab — missile trajectory testing and predicted target intercept.
 //
 // Before launch ASTRIX flies the engagement once with a healthy vehicle — that
 // prediction is the trajectory check (GO / NO-GO) and the reference corridor.
@@ -150,7 +150,7 @@ export default function InterceptLab() {
       )}
 
       <Panel
-        title="Interceptor trajectory check"
+        title="Trajectory and predicted intercept"
         note="Predict the engagement, inject a fault or cyber attack, watch what the ground can see"
       >
         <Controls config={config} catalog={catalog} update={update} loading={loading} />

@@ -13,6 +13,13 @@ data/vector_store.json
 data/models/*.joblib
 data/telemetry/*.jsonl
 data/telemetry/*.csv
+data/corpus/
+data/astrix.db-*
+training/astrix-lm*/
+training/*.gguf
+
+# vercel
+.vercel
 
 # frontend
 node_modules/

@@ -424,7 +424,7 @@ class DigitalTwin:
 
         failed = [c.name for c in checks if not c.passed]
         # Run probabilistic Monte Carlo simulation across 50 stochastic parameter perturbations
-        mc_envelopes, mc_confidence = self._run_monte_carlo(frame, resources, effect, n_runs=50)
+        mc_envelopes, mc_confidence = self._run_monte_carlo(frame, resources, effect, n_runs=50, base_trace=action)
 
         summary = effect.note
         if failed:
@@ -467,11 +467,13 @@ class DigitalTwin:
         resources: ResourceState,
         effect: ActionEffect,
         n_runs: int = 50,
+        base_trace: _Trace | None = None,
     ) -> tuple[dict[str, list[float]], float]:
         """Run stochastic simulations perturbing solar flux, friction, and sensor noise."""
         import numpy as np
 
-        base_trace = self._run(frame, resources, effect)
+        if base_trace is None:
+            base_trace = self._run(frame, resources, effect)
         steps = len(base_trace.t)
         if steps == 0:
             return {}, 1.0
@@ -480,29 +482,22 @@ class DigitalTwin:
         base_soc = np.array(base_trace.soc)
         base_temp = np.array(base_trace.temperature)
 
-        att_runs = np.zeros((n_runs, steps))
-        soc_runs = np.zeros((n_runs, steps))
-        temp_runs = np.zeros((n_runs, steps))
-
         att_limit = float(self.checks_cfg["attitude_stable_limit_deg"])
         temp_limit = float(self.checks_cfg["temperature_max"])
-        successes = 0
 
         # Deterministic seed for reproducible evaluation while retaining realistic stochastic variance
         rng = np.random.default_rng(42)
-        for i in range(n_runs):
-            att_noise = rng.normal(0.0, 0.015, size=steps)
-            temp_noise = rng.normal(0.0, 0.25, size=steps)
-            soc_drift = rng.normal(0.0, 0.15, size=steps)
+        att_noise = rng.normal(0.0, 0.015, size=(n_runs, steps))
+        temp_noise = rng.normal(0.0, 0.25, size=(n_runs, steps))
+        soc_drift = rng.normal(0.0, 0.15, size=(n_runs, steps))
 
-            att_runs[i] = np.maximum(0.0, base_att + att_noise)
-            temp_runs[i] = base_temp + temp_noise
-            soc_runs[i] = np.clip(base_soc + soc_drift, 0.0, 100.0)
+        att_runs = np.maximum(0.0, base_att + att_noise)
+        temp_runs = base_temp + temp_noise
+        soc_runs = np.clip(base_soc + soc_drift, 0.0, 100.0)
 
-            if att_runs[i, -1] <= att_limit * 1.05 and np.max(temp_runs[i]) <= temp_limit:
-                successes += 1
+        success_mask = (att_runs[:, -1] <= att_limit * 1.05) & (np.max(temp_runs, axis=1) <= temp_limit)
+        confidence = round(float(np.sum(success_mask) / max(1, n_runs)), 3)
 
-        confidence = round(successes / max(1, n_runs), 3)
         envelopes = {
             "attitude_p05": np.percentile(att_runs, 5, axis=0).round(4).tolist(),
             "attitude_p50": np.percentile(att_runs, 50, axis=0).round(4).tolist(),

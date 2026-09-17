@@ -18,6 +18,8 @@ import logging
 from pathlib import Path
 
 from .agents.llm import AgentLLM
+from .auth.conversations import ConversationStore
+from .auth.service import AuthService
 from .config import Settings, get_settings
 from .memory.db import build_session_factory, init_db
 from .memory.seed import seed_all
@@ -54,6 +56,18 @@ class Astrix:
             self.vectors.count(),
         )
 
+        # ---------- accounts ----------
+        # Operator sign-in and per-account conversation threads share the mission
+        # database, so a deployment has one thing to back up, not two.
+        self.auth = AuthService(self.session_factory, s.session_ttl_hours)
+        self.conversations = ConversationStore(self.session_factory)
+        expired = self.auth.purge_expired()
+        log.info(
+            "accounts ready (%d registered, %d expired session(s) purged)",
+            self.auth.count_users(),
+            expired,
+        )
+
         # ---------- detection ----------
         self.detector = self._load_or_train_detector()
         self.scorer = ContextScorer(s)
@@ -65,7 +79,8 @@ class Astrix:
         # ---------- reasoning ----------
         self.llm = AgentLLM(s)
         if self.llm.available:
-            log.info("agent reasoning: LLM enabled (%s)", s.llm_model)
+            status = self.llm.status
+            log.info("agent reasoning: LLM enabled (%s · %s)", status.get("provider_label"), status.get("model"))
         else:
             log.warning(
                 "agent reasoning: DETERMINISTIC only — %s", self.llm.status["reason"]
@@ -85,6 +100,40 @@ class Astrix:
             buffer=self.buffer,
             bus=self.bus,
         )
+
+        # ---------- hardware-in-the-loop ----------
+        from .hardware import HardwareHub
+
+        self.hardware = HardwareHub(self.bus, stale_seconds=s.hardware_stale_seconds)
+
+        # ---------- Astrix-LM training corpus ----------
+        self.model_lab = None
+        if s.corpus_enabled:
+            try:
+                from .training import ModelLab
+
+                self.model_lab = ModelLab(
+                    s.corpus_path,
+                    s.corpus_key,
+                    s.corpus_auto_train_every,
+                    self.bus,
+                    mission_summaries=s.mission_summaries_enabled,
+                    open_world=s.open_world_diagnosis,
+                    novelty_threshold=s.novelty_similarity_threshold,
+                )
+                log.info("training corpus ready (%d examples)", self.model_lab.corpus.count())
+            except Exception as exc:  # noqa: BLE001 — learning must never block operations
+                log.error("training corpus unavailable: %s", exc)
+
+        # On-board Small Language & Neural Decision Model
+        from .training.small_llm import AstrixSmallLM
+
+        self.small_lm = self.model_lab.small_lm if self.model_lab else AstrixSmallLM()
+        # Astrix's own model is a first-class reasoner, not just an endpoint: the
+        # gateway routes to it through its own lazy accessor, which is what lets
+        # the console answer an operational question with no third-party API.
+        if self.small_lm.is_trained:
+            log.info("on-board Small LM available as a reasoner (%s)", self.small_lm.version)
 
         # Set by main.py once the app owns an event loop.
         self.runner = None
@@ -135,4 +184,7 @@ class Astrix:
             "autonomy_limit": self.settings.auto_execute_max_risk.value,
             "vector_backend": self.settings.vector_backend,
             "database": self.settings.database_url.split("://")[0],
+            "hardware": {"connected": self.hardware.connected},
+            "corpus_examples": self.model_lab.corpus.count() if self.model_lab else None,
+            "accounts": self.auth.count_users(),
         }

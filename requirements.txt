@@ -25,6 +25,12 @@ psycopg[binary]==3.2.3
 # --- agent reasoning ---
 anthropic>=0.42.0
 
+# --- Astrix-LM corpus encryption ---
+cryptography>=43.0
+
+# --- hardware-in-the-loop serial bridge ---
+pyserial>=3.5
+
 # --- config ---
 PyYAML==6.0.2
 python-dotenv>=1.0

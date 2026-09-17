@@ -42,8 +42,18 @@ class MissionError(RuntimeError):
 
 
 class MissionRunner:
-    def __init__(self, pipeline: AstrixPipeline, spacecraft_id: str = "ASTRIX-01") -> None:
+    def __init__(
+        self,
+        pipeline: AstrixPipeline,
+        spacecraft_id: str = "ASTRIX-01",
+        hardware=None,
+        model_lab=None,
+    ) -> None:
         self.pipeline = pipeline
+        self.hardware = hardware  # HardwareHub | None — real sensors blended into telemetry
+        self.model_lab = model_lab  # ModelLab | None — captures the end-of-mission summary
+        self._vehicle: dict | None = None
+        self._plan = None
         self.spacecraft_id = spacecraft_id
         self._sim = None
         self._launch = None
@@ -81,12 +91,19 @@ class MissionRunner:
         include_launch: bool = True,
         launch_time_scale: float = 20.0,
         launch_fault: str | None = None,
+        vehicle: dict | None = None,
     ) -> dict:
-        """Start (or restart) the mission from the launch pad, or directly in orbit."""
+        """Start (or restart) the mission from the launch pad, or directly in orbit.
+
+        `vehicle` is an optional `telemetry.vehicles.VehicleDesign` as a dict; the
+        ascent then flies that rocket and the orbital simulator uses that satellite.
+        """
         from telemetry.scenarios import get_scenario
+        from telemetry.vehicles import VehicleDesign, build_plan
 
         if scenario is not None:
             get_scenario(scenario)  # validate before tearing anything down (KeyError -> 422)
+        design = VehicleDesign(**vehicle) if vehicle else None  # ValidationError -> 422
 
         await self.stop(publish=False)
 
@@ -97,6 +114,8 @@ class MissionRunner:
         self._sim = None
         self._launch = None
         self._launch_fault = launch_fault
+        self._vehicle = design.model_dump() if design else None
+        self._plan = build_plan(design) if design else None
         self._interval = max(0.02, interval)
         self._dt = dt
         self._settle_frames = max(0, settle_frames)
@@ -112,7 +131,11 @@ class MissionRunner:
 
         self.pipeline.bus.publish(
             "mission_started",
-            {"spacecraft_id": self.spacecraft_id, "include_launch": include_launch},
+            {
+                "spacecraft_id": self.spacecraft_id,
+                "include_launch": include_launch,
+                "vehicle": self.vehicle_summary(),
+            },
         )
         self._task = asyncio.create_task(self._run(include_launch), name="astrix-mission-runner")
         log.info(
@@ -129,11 +152,23 @@ class MissionRunner:
                 await task
             except asyncio.CancelledError:
                 pass
-        if self.phase not in ("IDLE", "STOPPED", "FAILED"):
+        flew = self.phase not in ("IDLE", "STOPPED", "FAILED")
+        if flew:
             self.phase = "STOPPED"
             if publish:
                 self.pipeline.bus.publish("mission_stopped", {"spacecraft_id": self.spacecraft_id})
-        return self.status()
+
+        status = self.status()
+        # Every completed mission becomes one training example: the arc, not the
+        # frames. Learning must never be able to fail a stop request.
+        if flew and self.model_lab is not None:
+            try:
+                summary = self.model_lab.record_mission({**status, "spacecraft_id": self.spacecraft_id})
+                if summary is not None:
+                    self.pipeline.bus.publish("mission_summary", summary)
+            except Exception:  # noqa: BLE001
+                log.exception("mission summary capture failed")
+        return status
 
     # -- fault control ------------------------------------------------------ #
 
@@ -181,17 +216,19 @@ class MissionRunner:
     async def _fly_launch(self) -> None:
         from telemetry.launch import LaunchProfile, milestone
 
-        profile = LaunchProfile(fault=getattr(self, "_launch_fault", None))
+        profile = LaunchProfile(fault=getattr(self, "_launch_fault", None), plan=self._plan)
+        summary = self.vehicle_summary()
         self._launch = profile
         step = LAUNCH_TICK_SECONDS * self._time_scale
         while not profile.finished:
             snapshot = profile.step(step)
             self.phase = snapshot.phase
             state = snapshot.as_dict()
+            state["vehicle"] = summary
             self.launch_state = state
             self.pipeline.bus.publish("launch", state)
             for key in snapshot.events:
-                record = {**milestone(key), "at_t": round(snapshot.t, 1)}
+                record = {**milestone(key, profile.plan), "at_t": round(snapshot.t, 1)}
                 self.milestones.append(record)
                 self.pipeline.bus.publish("launch_milestone", record)
             await asyncio.sleep(LAUNCH_TICK_SECONDS)
@@ -215,7 +252,10 @@ class MissionRunner:
         from telemetry.simulator import SpacecraftSimulator
 
         self._sim = SpacecraftSimulator(
-            spacecraft_id=self.spacecraft_id, dt=self._dt, seed=self._seed
+            spacecraft_id=self.spacecraft_id,
+            dt=self._dt,
+            seed=self._seed,
+            satellite=self._vehicle["satellite"] if self._vehicle else None,
         )
         # Settle frames give the rolling window and the smoothing state context,
         # so the first monitored frames look like a healthy mission rather than a
@@ -234,6 +274,8 @@ class MissionRunner:
     async def _step(self) -> TelemetryFrame:
         assert self._sim is not None
         frame = self._sim.step()
+        if self.hardware is not None:
+            frame = self.hardware.overlay(frame)
         # The pipeline is synchronous and may make a blocking LLM call, so it runs
         # off the event loop.
         await asyncio.to_thread(self.pipeline.ingest, frame)
@@ -250,6 +292,12 @@ class MissionRunner:
             del self.commands_applied[:-50]
             log.info("command applied to spacecraft: %s -> %s", command["action_id"], effect)
             self.pipeline.bus.publish("command_applied", record)
+            if self.hardware is not None and self.hardware.connected:
+                from ..hardware import action_to_command
+
+                hw_command = action_to_command(command["action_id"])
+                if hw_command:
+                    self.hardware.queue(hw_command, source="astrix-recovery")
 
     async def _run(self, include_launch: bool) -> None:
         try:
@@ -272,6 +320,18 @@ class MissionRunner:
 
     # -- introspection ------------------------------------------------------ #
 
+    def vehicle_summary(self) -> dict:
+        from telemetry.launch import DEFAULT_PLAN
+
+        plan = self._plan or DEFAULT_PLAN
+        summary = plan.summary()
+        if self._vehicle:
+            summary["rocket_color"] = self._vehicle["rocket"]["color"]
+            summary["satellite_color"] = self._vehicle["satellite"]["color"]
+            summary["satellite"] = self._vehicle["satellite"]
+        summary["custom"] = self._vehicle is not None
+        return summary
+
     def status(self) -> dict:
         sim = self._sim
         scenario = sim.scenario if sim else None
@@ -285,6 +345,8 @@ class MissionRunner:
             "frames_emitted": self.frames_emitted,
             "simulated_seconds": round(sim.t, 1) if sim else 0.0,
             "launch": self.launch_state,
+            "vehicle": self.vehicle_summary(),
+            "hardware_in_loop": bool(self.hardware and self.hardware.connected and self.hardware.baseline),
             "milestones": self.milestones,
             "queued_scenario": self._queued_scenario,
             "active_scenario": scenario.key if scenario else None,

@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
 from .deps import get_astrix
 
@@ -27,6 +27,22 @@ HEARTBEAT_SECONDS = 20.0
 @router.websocket("/ws/telemetry")
 async def telemetry_socket(websocket: WebSocket) -> None:
     astrix = get_astrix(websocket)  # WebSocket exposes .app like Request does
+
+    # The browser WebSocket API cannot set an Authorization header, so the session
+    # token arrives as a query parameter. It is a bearer credential either way; the
+    # socket is rejected before `accept()` so an unauthenticated client never sees
+    # a frame of telemetry.
+    settings = astrix.settings
+    if settings.require_auth:
+        token = websocket.query_params.get("token", "").strip()
+        machine = settings.api_token
+        ok = bool(token) and (
+            (bool(machine) and token == machine) or astrix.auth.resolve(token) is not None
+        )
+        if not ok:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Sign in to continue.")
+            return
+
     await websocket.accept()
     bus = astrix.bus
     queue = bus.subscribe()

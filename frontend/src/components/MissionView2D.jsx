@@ -202,17 +202,39 @@ function drawLaunch(ctx, w, h, snap, track, now, opts) {
 
   // Separated hardware drifts away and fades after its milestone.
   const t = snap.t ?? 0
-  if (layers.debris && t >= 153) drawDebris(ctx, vx, vy, heading, t - 153, 'stage1')
-  if (layers.debris && t >= 205) drawDebris(ctx, vx, vy, heading, t - 205, 'fairing')
-  if (layers.debris && t >= 560) drawDebris(ctx, vx, vy, heading, t - 560, 'upper')
+  const v = vehicleOf(snap)
+  if (layers.debris) {
+    for (const sep of v.separations) {
+      if (t >= sep) drawDebris(ctx, vx, vy, heading, t - sep, 'stage1')
+    }
+    if (t >= v.fairing_sep_t) drawDebris(ctx, vx, vy, heading, t - v.fairing_sep_t, 'fairing')
+    if (t >= v.payload_sep_t) drawDebris(ctx, vx, vy, heading, t - v.payload_sep_t, 'upper')
+  }
 
   drawVehicle(ctx, vx, vy, heading, snap, now)
 }
 
+// Reference-vehicle defaults; custom designs publish their own timings.
+const REFERENCE_VEHICLE = {
+  name: 'ASTRIX-LV',
+  payload_name: 'ASTRIX-01',
+  stages: 2,
+  separations: [153],
+  fairing_sep_t: 205,
+  payload_sep_t: 560,
+  arrays_t: 590,
+}
+
+function vehicleOf(snap) {
+  return { ...REFERENCE_VEHICLE, ...(snap?.vehicle ?? {}) }
+}
+
 function stageName(snap) {
-  if ((snap.stage ?? 0) >= 3) return 'ASTRIX-01 (free-flying)'
-  if ((snap.stage ?? 0) === 2) return 'Stage 2'
-  return (snap.t ?? 0) < 0 ? 'On pad' : 'Stage 1'
+  const v = vehicleOf(snap)
+  const stage = snap.stage ?? 0
+  if (stage > v.stages) return `${v.payload_name} (free-flying)`
+  if (stage >= 1 && (snap.t ?? 0) >= 0) return `${v.name} · stage ${stage}`
+  return `${v.name} on pad`
 }
 
 function drawStars(ctx, w, h) {
@@ -256,23 +278,27 @@ function drawDebris(ctx, x, y, heading, age, kind) {
 }
 
 function drawVehicle(ctx, x, y, heading, snap, now) {
+  const v = vehicleOf(snap)
   const stage = snap.stage ?? 0
   const throttle = snap.throttle_pct ?? 0
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(heading)
 
-  if (stage >= 3) {
-    drawSatelliteGlyph(ctx, snap.arrays_deployed ? 1 : clamp01(((snap.t ?? 560) - 560) / 30), STATUS.good)
+  if (stage > v.stages) {
+    const unfold = snap.arrays_deployed ? 1 : clamp01(((snap.t ?? v.payload_sep_t) - v.payload_sep_t) / Math.max(1, v.arrays_t - v.payload_sep_t))
+    drawSatelliteGlyph(ctx, unfold, STATUS.good)
     ctx.restore()
     return
   }
+  // Lower stages still attached stack below the upper stage.
+  const lowerStages = Math.max(0, v.stages - Math.max(1, stage))
 
   // Exhaust plume flickers with throttle.
   if (throttle > 0) {
     const flicker = 0.85 + 0.15 * Math.sin(now / 45)
     const length = (10 + 26 * (snap.acceleration_g ?? 1) / 2.2) * flicker
-    const base = stage === 1 ? 14 : 10
+    const base = lowerStages > 0 ? 14 + 12 * (lowerStages - 1) : 10
     const plume = ctx.createLinearGradient(0, base, 0, base + length)
     plume.addColorStop(0, 'rgba(255,240,200,0.95)')
     plume.addColorStop(0.4, 'rgba(255,179,71,0.8)')
@@ -286,13 +312,13 @@ function drawVehicle(ctx, x, y, heading, snap, now) {
     ctx.fill()
   }
 
-  // Stage 1 booster.
-  if (stage <= 1) {
-    ctx.fillStyle = COLORS.stage
-    ctx.fillRect(-4, -2, 8, 16)
+  // Attached lower stages (booster at the bottom).
+  for (let i = 0; i < lowerStages; i += 1) {
+    ctx.fillStyle = i % 2 ? COLORS.vehicle : COLORS.stage
+    ctx.fillRect(-4, -2 + 12 * i, 8, i === lowerStages - 1 ? 16 : 12)
   }
-  // Stage 2.
-  ctx.fillStyle = COLORS.vehicle
+  // Upper stage.
+  ctx.fillStyle = v.rocket_color ?? COLORS.vehicle
   ctx.fillRect(-3.5, -12, 7, 10)
   // Fairing or exposed payload.
   if (snap.fairing_attached) {

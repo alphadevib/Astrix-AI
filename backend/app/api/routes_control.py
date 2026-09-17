@@ -54,8 +54,9 @@ async def mission_start(body: MissionStartRequest, runner: RunnerDep) -> dict:
             include_launch=body.include_launch,
             launch_time_scale=body.launch_time_scale,
             launch_fault=body.launch_fault,
+            vehicle=body.vehicle,
         )
-    except KeyError as exc:  # unknown scenario key
+    except (KeyError, ValueError) as exc:  # unknown scenario key or invalid vehicle design
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from None
 
 

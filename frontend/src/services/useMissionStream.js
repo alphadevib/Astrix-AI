@@ -11,7 +11,7 @@
 // dashboard can show how fast ASTRIX reacted rather than just that it did.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import api from './api'
+import api, { apiBase } from './api'
 
 const MAX_FRAMES = 240
 const MAX_ACTIVITY = 120
@@ -46,7 +46,7 @@ const ACTIVITY_TYPES = new Set([
 const EMPTY_TIMELINE = null
 
 function socketUrl() {
-  const base = import.meta.env.VITE_API_BASE
+  const base = apiBase()
   if (base) {
     return `${base.replace(/^http/, 'ws')}/ws/telemetry`
   }

@@ -142,10 +142,16 @@ class AnomalyDetector:
             self._score_hi = self._score_lo + 1e-9
 
         worst = np.zeros(len(self.feature_names))
-        for row, mode in zip(reference, reference_modes):
-            worst = np.maximum(worst, np.abs(self._z(row, mode)))
+        ref_modes_arr = np.array(reference_modes)
+        for mode_name in np.unique(ref_modes_arr):
+            mask = ref_modes_arr == mode_name
+            mode_rows = reference[mask]
+            mean, std = self.mode_stats.get(mode_name, (self.train_mean, self.train_std))
+            mode_worst = np.max(np.abs((mode_rows - mean) / std), axis=0)
+            worst = np.maximum(worst, mode_worst)
         self._z_ceiling = np.maximum(worst * Z_CEILING_MARGIN, Z_CEILING_FLOOR)
         self.n_train = matrix.shape[0]
+        self._init_fast_path()
 
         log.info(
             "detector fitted on %d frames (%d modes; forest band %.4f..%.4f; "
@@ -200,7 +206,25 @@ class AnomalyDetector:
         detector.n_train = blob.get("n_train", 0)
         if detector.feature_names != FEATURE_NAMES:
             raise ValueError("stored detector was trained on a different feature set")
+        detector._init_fast_path()
         return detector
+
+    def _init_fast_path(self) -> None:
+        if self.forest is not None and self.scaler is not None:
+            try:
+                import sklearn.ensemble._iforest as iforest_module
+                self._estimators_trees = [e.tree_ for e in self.forest.estimators_]
+                self._decision_path_lengths = self.forest._decision_path_lengths
+                self._average_path_length_per_tree = self.forest._average_path_length_per_tree
+                avg_path_length_max = iforest_module._average_path_length([self.forest._max_samples])[0]
+                self._iforest_denom = float(len(self.forest.estimators_) * avg_path_length_max)
+                self._scaler_mean = self.scaler.mean_.astype(np.float32)
+                self._scaler_scale = self.scaler.scale_.astype(np.float32)
+                self._fast_ready = True
+            except Exception:
+                self._fast_ready = False
+        else:
+            self._fast_ready = False
 
     # -- inference ---------------------------------------------------------- #
 
@@ -213,8 +237,20 @@ class AnomalyDetector:
             return DetectorOutput(score=0.0, fitted=False)
 
         vector = frame_to_vector(frame)
-        scaled = self.scaler.transform(vector.reshape(1, -1))  # type: ignore[union-attr]
-        raw = float(-self.forest.score_samples(scaled)[0])  # type: ignore[union-attr]
+        if getattr(self, "_fast_ready", False):
+            scaled_f32 = np.ascontiguousarray(
+                ((vector - self._scaler_mean) / self._scaler_scale).astype(np.float32).reshape(1, -1)
+            )
+            depth = 0.0
+            d_paths = self._decision_path_lengths
+            avg_paths = self._average_path_length_per_tree
+            for i, t in enumerate(self._estimators_trees):
+                leaf = t.apply(scaled_f32)[0]
+                depth += d_paths[i][leaf] + avg_paths[i][leaf] - 1.0
+            raw = float(2.0 ** (-depth / self._iforest_denom))
+        else:
+            scaled = self.scaler.transform(vector.reshape(1, -1))  # type: ignore[union-attr]
+            raw = float(-self.forest.score_samples(scaled)[0])  # type: ignore[union-attr]
         forest_score = float(np.clip((raw - self._score_lo) / (self._score_hi - self._score_lo), 0.0, 1.0))
 
         z = self._z(vector, frame.mode.value)
