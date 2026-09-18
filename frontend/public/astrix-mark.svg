@@ -1,17 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="currentColor" role="img" aria-label="Astrix">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Astrix">
   <title>Astrix</title>
-<defs>
-    <mask id="ma">
-      <rect x="-200" y="-200" width="600" height="600" fill="#fff"/>
-      <path d="M48.0 7.0C48.95 19.3 58.5 35.7 53.5 45.54L48.0 48.0L42.5 45.54C40.8 35.7 47.61 19.3 48.0 7.0ZM89.0 48.0C76.7 48.95 60.3 58.5 50.46 53.5L48.0 48.0L50.46 42.5C60.3 40.8 76.7 47.61 89.0 48.0ZM48.0 89.0C47.05 76.7 37.5 60.3 42.5 50.46L48.0 48.0L53.5 50.46C55.2 60.3 48.39 76.7 48.0 89.0ZM7.0 48.0C19.3 47.06 35.7 37.5 45.54 42.5L48.0 48.0L45.54 53.5C35.7 55.2 19.3 48.39 7.0 48.0Z" fill="#000" stroke="#000" stroke-width="5.5" stroke-linejoin="round"
-            transform="translate(0 0) scale(1.0)"/>
-    </mask>
+  <defs>
+    <linearGradient id="nebula" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#A99BFF"/><stop offset="55%" stop-color="#6150FF"/><stop offset="100%" stop-color="#4F39F6"/></linearGradient>
+    <mask id="star"><rect width="96" height="96" fill="#fff"/><path d="M48 32Q50.6 44.4 63 47Q50.6 49.6 48 62Q45.4 49.6 33 47Q45.4 44.4 48 32Z" fill="#000"/></mask>
   </defs>
-  <g transform="translate(0 0) scale(1.0)" fill="currentColor">
-    <g mask="url(#ma)">
-      <ellipse cx="48" cy="48" rx="43" ry="16.5" fill="none" stroke="currentColor"
-               stroke-width="7.5" transform="rotate(-22 48 48)"/>
-    </g>
-    <path d="M48.0 7.0C48.95 19.3 58.5 35.7 53.5 45.54L48.0 48.0L42.5 45.54C40.8 35.7 47.61 19.3 48.0 7.0ZM89.0 48.0C76.7 48.95 60.3 58.5 50.46 53.5L48.0 48.0L50.46 42.5C60.3 40.8 76.7 47.61 89.0 48.0ZM48.0 89.0C47.05 76.7 37.5 60.3 42.5 50.46L48.0 48.0L53.5 50.46C55.2 60.3 48.39 76.7 48.0 89.0ZM7.0 48.0C19.3 47.06 35.7 37.5 45.54 42.5L48.0 48.0L45.54 53.5C35.7 55.2 19.3 48.39 7.0 48.0Z"/>
-  </g>
+  <path d="M48 8C56 8 88 78 88 84C88 88 84 90 80 88L48 70L16 88C12 90 8 88 8 84C8 78 40 8 48 8Z" fill="url(#nebula)" mask="url(#star)"/>
 </svg>
