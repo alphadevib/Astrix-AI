@@ -3,7 +3,7 @@
 // Connect a board over Web Serial (or the built-in emulator), watch its live
 // sensors, send commands, and inject faults on the chip itself. While a
 // Flight Assurance mission is on orbit, calibrated readings perturb the
-// simulated spacecraft, so ASTRIX detects and recovers from real hardware
+// simulated spacecraft, so Astrix detects and recovers from real hardware
 // behaviour — and its approved recovery actions are written back to the board.
 
 import { useEffect, useMemo, useState } from 'react'

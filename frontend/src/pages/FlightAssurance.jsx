@@ -1,11 +1,11 @@
 // Flight Assurance — spacecraft anomaly testing before and after launch.
 //
 // Fly an ascent (reference or a Vehicle Studio design, nominal or with a launch
-// fault), then inject on-orbit faults and watch ASTRIX detect, diagnose, plan,
+// fault), then inject on-orbit faults and watch Astrix detect, diagnose, plan,
 // verify and recover.
 //
 // Reading order top to bottom is the loop's own order: what the spacecraft is
-// doing, then what ASTRIX detected, then what it concluded, then what it
+// doing, then what Astrix detected, then what it concluded, then what it
 // proposes, then what verification said, then what it learned. An operator
 // scanning downward is walking the decision chain.
 //
@@ -29,7 +29,7 @@ import WhatIfSandbox from '../components/WhatIfSandbox'
 import AgentThoughtInspector from '../components/AgentThoughtInspector'
 
 const SECTIONS = [
-  { key: 'overview', label: 'Overview', description: 'Test setup, the live flight view and the ASTRIX loop' },
+  { key: 'overview', label: 'Overview', description: 'Test setup, the live flight view and the Astrix loop' },
   { key: 'telemetry', label: 'Telemetry', description: 'Subsystem channels against their limits' },
   { key: 'analysis', label: 'Analysis', description: 'Detection, memory recall, diagnosis and risk' },
   { key: 'recovery', label: 'Recovery', description: 'Candidate actions, twin simulation and safety verification' },
@@ -112,7 +112,7 @@ export default function FlightAssurance({ stream, vehicle }) {
             <MissionTheater stream={stream} />
             {latest && <Vitals frame={latest} resources={cycle?.resources} />}
             <Panel
-              title="ASTRIX loop"
+              title="Astrix loop"
               note="Detect · Remember · Diagnose · Assess · Plan · Simulate · Verify · Recover · Learn"
             >
               <LoopTrail cycle={cycle} learning={learning} />

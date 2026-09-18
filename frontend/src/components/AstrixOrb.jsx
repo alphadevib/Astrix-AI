@@ -37,19 +37,19 @@ export default function AstrixOrb({ size = 88, state = 'idle', className = '' })
         <defs>
           {/* Lit from the upper left, as the console's own light falls. */}
           <radialGradient id={body} cx="34%" cy="28%" r="78%">
-            <stop offset="0%" stopColor="#CFC6FF" />
-            <stop offset="34%" stopColor="#8B7BFF" />
-            <stop offset="68%" stopColor="#4B3BA8" />
-            <stop offset="100%" stopColor="#16122E" />
+            <stop offset="0%" stopColor="#C9C1FF" />
+            <stop offset="34%" stopColor="#6150FF" />
+            <stop offset="68%" stopColor="#3421C9" />
+            <stop offset="100%" stopColor="#0B0724" />
           </radialGradient>
           <radialGradient id={sheen} cx="30%" cy="22%" r="42%">
             <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.85" />
             <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
           </radialGradient>
           <radialGradient id={atmosphere} cx="50%" cy="50%" r="50%">
-            <stop offset="72%" stopColor="#4FD8E4" stopOpacity="0" />
-            <stop offset="93%" stopColor="#4FD8E4" stopOpacity="0.42" />
-            <stop offset="100%" stopColor="#4FD8E4" stopOpacity="0" />
+            <stop offset="72%" stopColor="#8B7BFF" stopOpacity="0" />
+            <stop offset="93%" stopColor="#8B7BFF" stopOpacity="0.42" />
+            <stop offset="100%" stopColor="#8B7BFF" stopOpacity="0" />
           </radialGradient>
           <clipPath id={clip}>
             <circle cx="60" cy="60" r="42" />
@@ -82,7 +82,7 @@ export default function AstrixOrb({ size = 88, state = 'idle', className = '' })
             strokeWidth="1"
             transform="rotate(-24 60 60)"
           />
-          <circle className="orb-satellite" cx="111" cy="38" r="3.4" fill="#4FD8E4" />
+          <circle className="orb-satellite" cx="111" cy="38" r="3.4" fill="#8B7BFF" />
         </g>
       </svg>
     </span>

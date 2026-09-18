@@ -1,10 +1,10 @@
 // Intercept Lab — missile trajectory testing and predicted target intercept.
 //
-// Before launch ASTRIX flies the engagement once with a healthy vehicle — that
+// Before launch Astrix flies the engagement once with a healthy vehicle — that
 // prediction is the trajectory check (GO / NO-GO) and the reference corridor.
 // The operator then injects a vehicle fault or a cyber attack and plays the
 // engagement back, watching what the ground-side health monitor sees, when each
-// consistency check trips, and what ASTRIX attributes the anomaly to.
+// consistency check trips, and what Astrix attributes the anomaly to.
 //
 // Everything on this page is driven by one stateless API call; the playhead is
 // purely client-side, so scrubbing and replaying never touch the backend.
@@ -628,7 +628,7 @@ function DiagnosisPanel({ result, time, onSeek }) {
   const injected = result?.fault
 
   return (
-    <Panel title="ASTRIX diagnosis" note={injected ? `injected: ${injected.title}` : 'no anomaly injected'}>
+    <Panel title="Astrix diagnosis" note={injected ? `injected: ${injected.title}` : 'no anomaly injected'}>
       {!items.length && (
         <Empty>
           {injected

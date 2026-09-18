@@ -212,7 +212,7 @@ export default function VehicleStudio({ design, onDesign, navigate }) {
               )}
               <p className="small muted" style={{ margin: '10px 0 0', lineHeight: 1.5 }}>
                 On orbit, telemetry is normalised to the reference bus: a satellite sized on the reference ratios
-                flies nominal telemetry, and an undersized array or battery shows up as a power anomaly for ASTRIX
+                flies nominal telemetry, and an undersized array or battery shows up as a power anomaly for Astrix
                 to catch.
               </p>
             </Panel>

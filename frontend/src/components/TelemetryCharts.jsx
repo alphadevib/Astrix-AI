@@ -200,7 +200,7 @@ export default function TelemetryCharts({ frames }) {
       />
       <Panel title="Agentic Telemetry Correlation" note="Multi-Subsystem Analysis">
         <p className="small muted" style={{ lineHeight: 1.65, margin: 0 }}>
-          ASTRIX-AI monitors cross-channel signatures in real time. For instance, in thermal excursions,
+          Astrix monitors cross-channel signatures in real time. For instance, in thermal excursions,
           the Diagnostic Agent checks if CPU load spiked; in thermal sensor faults, it cross-checks the
           redundant sensor to detect instrumentation failures before executing costly power shutdowns.
         </p>

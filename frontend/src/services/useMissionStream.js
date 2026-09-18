@@ -8,10 +8,11 @@
 //
 // It also keeps the fault timeline — frame of injection, first detection, first
 // alarm, diagnosis, decision, outcome — measured in spacecraft frames, so the
-// dashboard can show how fast ASTRIX reacted rather than just that it did.
+// dashboard can show how fast Astrix reacted rather than just that it did.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import api, { apiBase } from './api'
+import session from './auth'
 
 const MAX_FRAMES = 240
 const MAX_ACTIVITY = 120
@@ -45,13 +46,16 @@ const ACTIVITY_TYPES = new Set([
 
 const EMPTY_TIMELINE = null
 
+// Browsers cannot set headers on a WebSocket, so the session token rides in the
+// query string. The server rejects the socket before accepting it without one.
 function socketUrl() {
   const base = apiBase()
+  const query = `?token=${encodeURIComponent(session.token())}`
   if (base) {
-    return `${base.replace(/^http/, 'ws')}/ws/telemetry`
+    return `${base.replace(/^http/, 'ws')}/ws/telemetry${query}`
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws/telemetry`
+  return `${protocol}//${window.location.host}/ws/telemetry${query}`
 }
 
 export function useMissionStream() {

@@ -1,11 +1,15 @@
-// Thin REST client for the ASTRIX backend.
+// Thin REST client for the Astrix backend.
 //
 // Paths are relative so the Vite dev proxy (and any reverse proxy in front of a
 // build) handles routing. On Vercel the frontend and the API live on different
 // origins: set VITE_API_BASE at build time, or let the operator enter the backend
-// URL in Settings (stored per browser).
+// URL in the profile console (stored per browser).
+//
+// Every request carries the operator's session token. A 401 means the session
+// is gone, so the session is cleared and the console falls back to sign-in.
 
-const TOKEN_KEY = 'astrix.apiToken'
+import session from './auth'
+
 const BASE_KEY = 'astrix.apiBase'
 
 function readStorage(key) {
@@ -31,15 +35,15 @@ export function apiBase() {
 
 export const connection = {
   base: apiBase,
-  token: () => readStorage(TOKEN_KEY),
-  save({ base, token }) {
+  saveBase(base) {
     writeStorage(BASE_KEY, (base ?? '').trim().replace(/\/$/, ''))
-    writeStorage(TOKEN_KEY, (token ?? '').trim())
   },
 }
 
+const PASSWORD_CHECKS = ['/auth/login', '/auth/register', '/auth/password']
+
 async function request(path, options = {}) {
-  const token = connection.token()
+  const token = session.token()
   const response = await fetch(`${apiBase()}${path}`, {
     ...options,
     headers: {
@@ -49,6 +53,11 @@ async function request(path, options = {}) {
     },
   })
   if (!response.ok) {
+    // A revoked or expired session: drop it so the console shows sign-in. These
+    // endpoints also answer 401 for a wrong password, which is not an expiry.
+    if (response.status === 401 && !PASSWORD_CHECKS.some((p) => path.startsWith(p))) {
+      session.expire()
+    }
     // FastAPI puts the useful part in `detail`; surface it rather than "500".
     let detail = response.statusText
     try {
@@ -65,10 +74,28 @@ async function request(path, options = {}) {
 }
 
 const get = (path) => request(path)
-const post = (path, body) =>
-  request(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) })
+const send = (method) => (path, body) =>
+  request(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })
+const post = send('POST')
+const patch = send('PATCH')
+const del = send('DELETE')
 
 export const api = {
+  // --- account ---
+  register: (body) => post('/auth/register', body),
+  login: (email, password) => post('/auth/login', { email, password }),
+  logout: () => post('/auth/logout'),
+  logoutAll: () => post('/auth/logout-all'),
+  me: () => get('/auth/me'),
+  updateProfile: (fields) => patch('/auth/me', fields),
+  changePassword: (currentPassword, newPassword, signOutOthers = true) =>
+    post('/auth/password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+      sign_out_others: signOutOthers,
+    }),
+  sessions: () => get('/auth/sessions'),
+
   health: () => get('/health'),
   meta: () => get('/meta'),
   status: () => get('/status'),
@@ -117,7 +144,12 @@ export const api = {
   // --- reasoner & assistant ---
   providers: () => get('/reasoner/providers'),
   selectReasoner: (provider, model) => post('/reasoner/select', { provider, model: model || null }),
-  chat: (message, history = [], vehicle = null) => post('/assistant/chat', { message, history, vehicle }),
+  chat: (message, conversationId = null, history = [], vehicle = null) =>
+    post('/assistant/chat', { message, conversation_id: conversationId, history, vehicle }),
+  conversations: () => get('/assistant/conversations'),
+  conversation: (id) => get(`/assistant/conversations/${encodeURIComponent(id)}`),
+  renameConversation: (id, title) => patch(`/assistant/conversations/${encodeURIComponent(id)}`, { title }),
+  deleteConversation: (id) => del(`/assistant/conversations/${encodeURIComponent(id)}`),
 
   // --- vehicle studio ---
   vehiclePresets: () => get('/vehicles/presets'),

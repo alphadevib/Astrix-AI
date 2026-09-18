@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react'
 import ReactDOM from 'react-dom/client'
 import Landing from './pages/Landing'
+import AstrixMark from './components/AstrixMark'
 
 // The landing page ships in the entry chunk; the console (charts, canvases,
 // WebSocket) is a separate chunk loaded only when someone opens /app.
@@ -20,8 +21,8 @@ if (isConsolePath() && !window.location.pathname.startsWith('/app')) {
 function Loading() {
   return (
     <div className="boot" role="status" aria-live="polite">
-      <img src="/astrix-emblem.svg" alt="" width="40" height="40" />
-      <span>Starting console…</span>
+      <AstrixMark size={40} tone="nebula" />
+      <span>Starting Astrix…</span>
     </div>
   )
 }

@@ -3,14 +3,16 @@
 // belongs on the content; chrome stays out of the way.
 //
 // The top bar still carries what an operator must never lose sight of: mission
-// phase, ASTRIX's current severity, pending approvals and whether the feed is live.
+// phase, Astrix's current severity, pending approvals and whether the feed is live.
+// The sidebar carries the operator's conversation threads and their account.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SEVERITY_COLOR, STATUS, INK } from '../theme'
 import Icon from './icons'
 import { Pill, fmt } from './primitives'
 import ReasonerPicker from './ReasonerPicker'
-import SettingsDialog from './SettingsDialog'
+import ProfileConsole, { initials } from './ProfileConsole'
+import AstrixMark from './AstrixMark'
 import { NoticeBar } from './Disclaimer'
 
 const COLLAPSE_KEY = 'astrix.sidebarCollapsed'
@@ -44,12 +46,131 @@ function NavItems({ pages, current, badges, onNavigate }) {
   ))
 }
 
-export default function AppShell({ pages, current, stream, hardware, onNewChat, children }) {
+function ThreadList({ threads, activeId, onSelect, onDelete }) {
+  if (threads === null) return null
+  if (threads.length === 0) {
+    return <div className="thread-empty">No conversations yet. Ask Astrix anything to start one.</div>
+  }
+  return (
+    <div className="thread-list" role="list" aria-label="Conversations">
+      {threads.map((thread) => (
+        <div
+          key={thread.id}
+          role="listitem"
+          tabIndex={0}
+          className={`thread-row ${thread.id === activeId ? 'active' : ''}`}
+          aria-current={thread.id === activeId ? 'true' : undefined}
+          title={thread.title}
+          onClick={() => onSelect(thread.id)}
+          onKeyDown={(event) => {
+            if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault()
+              onSelect(thread.id)
+            }
+          }}
+        >
+          <span className="thread-title">{thread.title}</span>
+          <button
+            type="button"
+            className="thread-delete"
+            aria-label={`Delete conversation: ${thread.title}`}
+            title="Delete conversation"
+            onClick={(event) => {
+              event.stopPropagation()
+              onDelete(thread.id)
+            }}
+          >
+            <Icon name="trash" size={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function AccountChip({ user, onOpenProfile, onSignOut }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onDown = (event) => {
+      if (!ref.current?.contains(event.target)) setOpen(false)
+    }
+    const onKey = (event) => event.key === 'Escape' && setOpen(false)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref}>
+      {open && (
+        <div className="account-menu" role="menu">
+          <div className="account-menu-head">
+            <strong>{user.name || 'Operator'}</strong>
+            <span>{user.email}</span>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            className="menu-item"
+            onClick={() => {
+              setOpen(false)
+              onOpenProfile()
+            }}
+          >
+            <Icon name="user" size={16} />
+            Profile and settings
+          </button>
+          <button type="button" role="menuitem" className="menu-item danger" onClick={onSignOut}>
+            <Icon name="logout" size={16} />
+            Sign out
+          </button>
+        </div>
+      )}
+      <button
+        type="button"
+        className="account-chip"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        title={user.email}
+      >
+        <span className="avatar" aria-hidden="true">
+          {initials(user)}
+        </span>
+        <span className="account-meta">
+          <span className="account-name">{user.name || user.email}</span>
+          <span className="account-role">{user.organisation || user.role || user.email}</span>
+        </span>
+      </button>
+    </div>
+  )
+}
+
+export default function AppShell({
+  pages,
+  current,
+  stream,
+  user,
+  onUserUpdated,
+  onSignOut,
+  threads,
+  activeThread,
+  onSelectThread,
+  onDeleteThread,
+  onNewChat,
+  children,
+}) {
   const { connected, mission, latest, detection, approval } = stream
   const page = pages.find((p) => p.key === current) ?? pages[0]
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [drawer, setDrawer] = useState(false)
-  const [settings, setSettings] = useState(false)
+  const [profile, setProfile] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -58,7 +179,7 @@ export default function AppShell({ pages, current, stream, hardware, onNewChat, 
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  useEffect(() => setDrawer(false), [current])
+  useEffect(() => setDrawer(false), [current, activeThread])
 
   const toggleCollapsed = () => {
     setCollapsed((value) => {
@@ -87,9 +208,9 @@ export default function AppShell({ pages, current, stream, hardware, onNewChat, 
     <div className={`shell ${collapsed ? 'collapsed' : ''} ${drawer ? 'drawer-open' : ''}`}>
       <aside className="sidebar" aria-label="Sidebar">
         <div className="sidebar-top">
-          <a className="brand" href="/" title="Astrix-AI home">
-            <img src="/astrix-emblem.svg" alt="" />
-            <span className="brand-name">Astrix-AI</span>
+          <a className="brand" href="/" title="Astrix home">
+            <AstrixMark size={24} tone="nebula" />
+            <span className="brand-name">Astrix</span>
           </a>
           <button
             type="button"
@@ -114,27 +235,18 @@ export default function AppShell({ pages, current, stream, hardware, onNewChat, 
               <NavItems pages={items} current={current} badges={badges} onNavigate={() => setDrawer(false)} />
             </div>
           ))}
+          <div className="thread-group">
+            <div className="nav-label">Conversations</div>
+            <ThreadList threads={threads} activeId={activeThread} onSelect={onSelectThread} onDelete={onDeleteThread} />
+          </div>
         </nav>
 
         <div className="sidebar-foot">
-          <div
-            className="foot-row"
-            title={connected ? 'Telemetry feed live' : 'Backend unreachable — check Settings'}
-            role="status"
-          >
-            <span className={`live-dot ${connected ? 'on' : 'off'}`} style={{ margin: '0 5px' }} />
-            <span>Backend</span>
-            <span className="foot-value">{connected ? 'live' : 'offline'}</span>
+          <div className="sidebar-status" role="status" title={connected ? 'Telemetry feed live' : 'Backend unreachable'}>
+            <span className={`live-dot ${connected ? 'on' : 'off'}`} />
+            <span>{connected ? 'Connected' : 'Offline'}</span>
           </div>
-          <div className="foot-row" title="Hardware-in-the-loop link">
-            <Icon name="usb" size={16} />
-            <span>Hardware</span>
-            <span className="foot-value">{hardware?.connected ? hardware.kind : 'none'}</span>
-          </div>
-          <button type="button" className="foot-row" onClick={() => setSettings(true)}>
-            <Icon name="settings" size={16} />
-            <span>Settings</span>
-          </button>
+          <AccountChip user={user} onOpenProfile={() => setProfile(true)} onSignOut={onSignOut} />
         </div>
       </aside>
       <div className="scrim" onClick={() => setDrawer(false)} aria-hidden="true" />
@@ -170,7 +282,7 @@ export default function AppShell({ pages, current, stream, hardware, onNewChat, 
         <NoticeBar />
       </div>
 
-      {settings && <SettingsDialog onClose={() => setSettings(false)} />}
+      {profile && <ProfileConsole user={user} onUserUpdated={onUserUpdated} onClose={() => setProfile(false)} />}
     </div>
   )
 }

@@ -186,7 +186,7 @@ export function MissionControls({ mission, onError, vehicle }) {
         <button
           className="btn primary"
           disabled={busy || !inOrbit || !selected}
-          title={inOrbit ? undefined : 'Available once the satellite is deployed and ASTRIX is online'}
+          title={inOrbit ? undefined : 'Available once the satellite is deployed and Astrix is online'}
           onClick={() => guard(() => api.injectFault(scenario))}
         >
           Inject

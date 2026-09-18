@@ -99,7 +99,7 @@ export function AgentActivity({ activity, fill = false }) {
     >
       {activity.length === 0 ? (
         <Empty>
-          No activity yet. Start the mission to fly the launch; once ASTRIX is online, inject a
+          No activity yet. Start the mission to fly the launch; once Astrix is online, inject a
           fault to watch the loop run.
         </Empty>
       ) : (
@@ -142,7 +142,7 @@ export function LearningPanel({ learning, outcome }) {
     return (
       <Panel title="Mission learning">
         <Empty>
-          Nothing learned yet this session. After a recovery executes, ASTRIX measures the real
+          Nothing learned yet this session. After a recovery executes, Astrix measures the real
           outcome over the following frames and writes what it learned back to mission memory.
         </Empty>
       </Panel>

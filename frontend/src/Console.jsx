@@ -1,9 +1,15 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import AppShell from './components/AppShell'
+import AstrixMark from './components/AstrixMark'
+import Auth from './pages/Auth'
+import api from './services/api'
+import session from './services/auth'
 import useMissionStream from './services/useMissionStream'
 import useHardwareLink from './services/useHardwareLink'
 import './index.css'
 import './styles/agentic.css'
+// Last, so its tokens re-point the older sheets' variables.
+import './styles/astrix.css'
 
 const Assistant = lazy(() => import('./pages/Assistant'))
 const FlightAssurance = lazy(() => import('./pages/FlightAssurance'))
@@ -87,10 +93,95 @@ function PageFallback() {
   )
 }
 
+const THREAD_KEY = 'astrix.activeThread'
+
+function readThread() {
+  try {
+    return window.sessionStorage.getItem(THREAD_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+function writeThread(id) {
+  try {
+    if (id) window.sessionStorage.setItem(THREAD_KEY, id)
+    else window.sessionStorage.removeItem(THREAD_KEY)
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+// The account gate. Nothing below it — not even the telemetry socket — starts
+// until there is a session the server accepts.
 export default function Console() {
+  const [token, setToken] = useState(session.token)
+  const [user, setUser] = useState(null)
+  const [reason, setReason] = useState('')
+
+  useEffect(
+    () =>
+      session.subscribe((next) => {
+        setToken(next)
+        if (!next) {
+          setUser(null)
+          writeThread(null)
+        }
+      }),
+    [],
+  )
+
+  useEffect(() => {
+    if (!token || user) return undefined
+    let cancelled = false
+    api
+      .me()
+      .then((result) => !cancelled && setUser(result.user))
+      .catch((error) => {
+        if (cancelled) return
+        // A 401 already cleared the session; anything else means the backend is down.
+        if (!/^401/.test(error.message)) setReason('The backend is unreachable. Sign in again once it is running.')
+        session.set('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, user])
+
+  useEffect(() => {
+    if (!token) document.title = 'Sign in · Astrix'
+  }, [token])
+
+  if (!token) {
+    return (
+      <Auth
+        reason={reason}
+        onSignedIn={(signedIn) => {
+          setReason('')
+          setUser(signedIn)
+        }}
+      />
+    )
+  }
+  if (!user) {
+    return (
+      <div className="boot" role="status" aria-live="polite">
+        <AstrixMark size={40} tone="nebula" />
+        <span>Signing in…</span>
+      </div>
+    )
+  }
+  return <Workspace user={user} onUserUpdated={setUser} />
+}
+
+function Workspace({ user, onUserUpdated }) {
   const [page, setPage] = useState(pageFromHash)
-  const [chatKey, setChatKey] = useState(0)
   const [vehicle, setVehicleState] = useState(loadVehicle)
+  const [threads, setThreads] = useState(null)
+  const [activeThread, setActiveThread] = useState(readThread)
+  // Bumped only when the operator switches or starts a thread, so the chat
+  // remounts then — and not when the server assigns an id to a new one.
+  const [chatKey, setChatKey] = useState(0)
   const stream = useMissionStream()
   const hardware = useHardwareLink()
 
@@ -115,23 +206,94 @@ export default function Console() {
 
   useEffect(() => {
     const current = PAGES.find((p) => p.key === page)
-    document.title = `${current.label} · Astrix-AI`
+    document.title = `${current.label} · Astrix`
   }, [page])
+
+  const refreshThreads = useCallback(() => {
+    api
+      .conversations()
+      .then((result) => setThreads(result.conversations))
+      .catch(() => setThreads((list) => list ?? []))
+  }, [])
+
+  useEffect(refreshThreads, [refreshThreads])
 
   const navigate = useCallback((key) => {
     window.location.hash = `#/${key}`
   }, [])
 
-  const newChat = useCallback(() => {
-    setChatKey((k) => k + 1)
-    navigate('assistant')
-  }, [navigate])
+  const openThread = useCallback(
+    (id) => {
+      setActiveThread(id)
+      writeThread(id)
+      setChatKey((k) => k + 1)
+      navigate('assistant')
+    },
+    [navigate],
+  )
+
+  const newChat = useCallback(() => openThread(null), [openThread])
+
+  const threadCreated = useCallback(
+    (id) => {
+      setActiveThread(id)
+      writeThread(id)
+      refreshThreads()
+    },
+    [refreshThreads],
+  )
+
+  const deleteThread = useCallback(
+    async (id) => {
+      const thread = threads?.find((t) => t.id === id)
+      if (!window.confirm(`Delete “${thread?.title ?? 'this conversation'}”? This cannot be undone.`)) return
+      setThreads((list) => list?.filter((t) => t.id !== id) ?? list)
+      if (id === activeThread) newChat()
+      try {
+        await api.deleteConversation(id)
+      } finally {
+        refreshThreads()
+      }
+    },
+    [threads, activeThread, newChat, refreshThreads],
+  )
+
+  const signOut = useCallback(async () => {
+    try {
+      await api.logout()
+    } catch {
+      /* the session is dropped locally either way */
+    }
+    session.set('')
+  }, [])
 
   return (
-    <AppShell pages={PAGES} current={page} stream={stream} hardware={hardware} onNewChat={newChat}>
+    <AppShell
+      pages={PAGES}
+      current={page}
+      stream={stream}
+      user={user}
+      onUserUpdated={onUserUpdated}
+      onSignOut={signOut}
+      threads={threads}
+      activeThread={page === 'assistant' ? activeThread : null}
+      onSelectThread={openThread}
+      onDeleteThread={deleteThread}
+      onNewChat={newChat}
+    >
       <Suspense fallback={<PageFallback />}>
         {page === 'assistant' && (
-          <Assistant key={chatKey} stream={stream} vehicle={vehicle} navigate={navigate} onDesign={setVehicle} />
+          <Assistant
+            key={chatKey}
+            conversationId={activeThread}
+            onThreadCreated={threadCreated}
+            onTurn={refreshThreads}
+            onMissing={newChat}
+            stream={stream}
+            vehicle={vehicle}
+            navigate={navigate}
+            onDesign={setVehicle}
+          />
         )}
         {page === 'assurance' && <FlightAssurance stream={stream} vehicle={vehicle} />}
         {page === 'intercept' && <InterceptLab />}

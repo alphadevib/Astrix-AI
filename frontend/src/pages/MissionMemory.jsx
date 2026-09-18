@@ -1,7 +1,7 @@
 // Mission Memory page — the spacecraft knowledge profile, lessons, anomaly
 // history, retrieval search and the verification audit trail.
 //
-// This page is where the project's central claim is checkable: that ASTRIX
+// This page is where the project's central claim is checkable: that Astrix
 // accumulates knowledge rather than just reacting. Everything here is read back
 // from persistent storage, so it survives a restart and grows across runs.
 
@@ -10,11 +10,15 @@ import api from '../services/api'
 import { INK, SERIES, STATUS } from '../theme'
 import { Empty, Panel, Pill, Tile, fmt } from '../components/primitives'
 
+// The last data shown, kept across visits so the page paints at once and the
+// fetch refreshes it in place instead of starting from an empty screen.
+const last = { profile: null, lessons: [], anomalies: [], audit: [] }
+
 export default function MissionMemory() {
-  const [profile, setProfile] = useState(null)
-  const [lessons, setLessons] = useState([])
-  const [anomalies, setAnomalies] = useState([])
-  const [audit, setAudit] = useState([])
+  const [profile, setProfile] = useState(() => last.profile)
+  const [lessons, setLessons] = useState(() => last.lessons)
+  const [anomalies, setAnomalies] = useState(() => last.anomalies)
+  const [audit, setAudit] = useState(() => last.audit)
   const [query, setQuery] = useState('reaction wheel vibration motor current degradation')
   const [results, setResults] = useState(null)
   const [searching, setSearching] = useState(false)
@@ -23,10 +27,14 @@ export default function MissionMemory() {
   const load = useCallback(() => {
     Promise.all([api.profile(), api.lessons(), api.anomalies(40), api.audit(80)])
       .then(([profileData, lessonData, anomalyData, auditData]) => {
-        setProfile(profileData)
-        setLessons(lessonData.lessons ?? [])
-        setAnomalies(anomalyData.anomalies ?? [])
-        setAudit(auditData.audit ?? [])
+        last.profile = profileData
+        last.lessons = lessonData.lessons ?? []
+        last.anomalies = anomalyData.anomalies ?? []
+        last.audit = auditData.audit ?? []
+        setProfile(last.profile)
+        setLessons(last.lessons)
+        setAnomalies(last.anomalies)
+        setAudit(last.audit)
       })
       .catch((err) => setError(err.message))
   }, [])

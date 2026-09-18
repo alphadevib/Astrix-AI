@@ -2,7 +2,7 @@
 // connected while the operator moves between labs.
 //
 // Readings are batched to the backend every 250 ms; commands the backend
-// queues (operator, assistant or ASTRIX recovery) come back in the response and
+// queues (operator, assistant or Astrix recovery) come back in the response and
 // are written to the board.
 
 import { useCallback, useEffect, useRef, useState } from 'react'

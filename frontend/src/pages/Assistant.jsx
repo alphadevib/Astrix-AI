@@ -1,16 +1,18 @@
 // Astrix — the conversational home of the console.
 //
 // Commands are executed by the backend's assistant through the same services
-// the buttons use; free-form questions go to the active reasoner. The
-// conversation survives page switches within the session.
+// the buttons use; free-form questions go to the active reasoner. Every
+// conversation is a server-side thread owned by the signed-in account: this
+// component shows one thread, or an empty one that the server creates on the
+// first message.
 
 import { useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Icon from '../components/icons'
 import Markdown from '../components/Markdown'
+import AstrixMark from '../components/AstrixMark'
+import AstrixOrb from '../components/AstrixOrb'
 import { fmt } from '../components/primitives'
-
-const STORE_KEY = 'astrix.chat.v1'
 
 const SUGGESTIONS = [
   { title: 'Launch a mission', prompt: 'launch mission', note: 'fly the ascent, then monitor on orbit' },
@@ -19,27 +21,46 @@ const SUGGESTIONS = [
   { title: 'Design a vehicle', prompt: 'design a 3-stage rocket for a 400 kg imaging satellite to 700 km', note: 'rocket + satellite sizing' },
 ]
 
-function loadMessages() {
-  try {
-    return JSON.parse(window.sessionStorage.getItem(STORE_KEY) ?? '[]')
-  } catch {
-    return []
-  }
+// Before threads lived on the server, the chat was one sessionStorage blob —
+// which is why "New conversation" kept bringing the old one back.
+try {
+  window.sessionStorage.removeItem('astrix.chat.v1')
+} catch {
+  /* storage unavailable */
 }
 
-export default function Assistant({ stream, vehicle, navigate, onDesign }) {
-  const [messages, setMessages] = useState(() => (loadMessages().length ? loadMessages() : []))
+export default function Assistant({ conversationId, onThreadCreated, onTurn, onMissing, stream, vehicle, navigate, onDesign }) {
+  const [messages, setMessages] = useState([])
+  const [loading, setLoading] = useState(Boolean(conversationId))
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const threadRef = useRef(conversationId)
   const endRef = useRef(null)
   const inputRef = useRef(null)
 
+  // The parent remounts this component to switch threads, so the id it was
+  // mounted with is the only one that ever needs loading.
   useEffect(() => {
-    try {
-      window.sessionStorage.setItem(STORE_KEY, JSON.stringify(messages.slice(-40)))
-    } catch {
-      /* storage unavailable */
+    if (!conversationId) return undefined
+    let cancelled = false
+    api
+      .conversation(conversationId)
+      .then((result) => {
+        if (!cancelled) setMessages(result.conversation.messages ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) onMissing?.()
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [messages])
 
@@ -51,11 +72,18 @@ export default function Assistant({ stream, vehicle, navigate, onDesign }) {
     const message = text.trim()
     if (!message || busy) return
     setInput('')
+    if (inputRef.current) inputRef.current.style.height = 'auto'
     const history = messages.slice(-10).map(({ role, content }) => ({ role, content }))
     setMessages((list) => [...list, { role: 'user', content: message }])
     setBusy(true)
     try {
-      const reply = await api.chat(message, history, vehicle)
+      const reply = await api.chat(message, threadRef.current, history, vehicle)
+      if (!threadRef.current && reply.conversation_id) {
+        threadRef.current = reply.conversation_id
+        onThreadCreated?.(reply.conversation_id)
+      } else {
+        onTurn?.()
+      }
       setMessages((list) => [
         ...list,
         { role: 'assistant', content: reply.reply, cards: reply.cards, reasoner: reply.reasoner, navigate: reply.navigate },
@@ -68,7 +96,7 @@ export default function Assistant({ stream, vehicle, navigate, onDesign }) {
           error: true,
           content: stream.connected
             ? `Request failed: ${error.message}`
-            : 'The backend is unreachable. Start it locally (`uvicorn backend.app.main:app`) or set its URL in **Settings**.',
+            : 'The backend is unreachable. Start it locally (`uvicorn backend.app.main:app`) or set its URL under **Profile and settings → Connection**.',
         },
       ])
     } finally {
@@ -77,34 +105,32 @@ export default function Assistant({ stream, vehicle, navigate, onDesign }) {
     }
   }
 
-  const clear = () => {
-    setMessages([])
-    try {
-      window.sessionStorage.removeItem(STORE_KEY)
-    } catch {
-      /* storage unavailable */
-    }
-  }
-
-  const empty = messages.length === 0
+  const empty = messages.length === 0 && !loading
 
   return (
     <div className={`chat ${empty ? 'is-empty' : ''}`}>
       {empty ? (
         <div className="chat-hero">
-          <img src="/astrix-emblem.svg" alt="" width="44" height="44" />
-          <h1>What are we testing today?</h1>
+          <AstrixOrb size={84} state={busy ? 'thinking' : 'idle'} />
+          <h1>
+            What are we <span className="mark-hl">testing</span> today?
+          </h1>
           <p>Launch and stress a spacecraft, check an interceptor's trajectory, design a vehicle or drive a hardware prototype.</p>
         </div>
       ) : (
-        <div className="chat-log" aria-live="polite">
+        <div className="chat-log" aria-live="polite" aria-busy={loading}>
+          {loading && (
+            <div className="page-loading" role="status">
+              <span className="spinner" aria-hidden="true" /> Loading conversation…
+            </div>
+          )}
           {messages.map((m, i) => (
             <Message key={i} message={m} navigate={navigate} onDesign={onDesign} />
           ))}
           {busy && (
             <div className="msg assistant">
               <div className="msg-avatar">
-                <img src="/astrix-emblem.svg" alt="" width="20" height="20" />
+                <AstrixMark size={18} tone="nebula" />
               </div>
               <div className="msg-body">
                 <span className="typing" aria-label="Astrix is working">
@@ -156,12 +182,7 @@ export default function Assistant({ stream, vehicle, navigate, onDesign }) {
             }}
           />
           <div className="composer-actions">
-            {!empty && (
-              <button type="button" className="composer-ghost" onClick={clear}>
-                Clear
-              </button>
-            )}
-            <button type="submit" className="send" disabled={busy || !input.trim()} aria-label="Send">
+            <button type="submit" className="send" disabled={busy || loading || !input.trim()} aria-label="Send">
               <Icon name={busy ? 'stop' : 'send'} size={17} strokeWidth={2.2} />
             </button>
           </div>
@@ -182,7 +203,7 @@ function Message({ message, navigate, onDesign }) {
   return (
     <div className={`msg assistant ${message.error ? 'error' : ''}`}>
       <div className="msg-avatar">
-        <img src="/astrix-emblem.svg" alt="" width="20" height="20" />
+        <AstrixMark size={18} tone="nebula" />
       </div>
       <div className="msg-body">
         <Markdown text={message.content} />

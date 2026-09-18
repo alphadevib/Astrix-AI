@@ -10,8 +10,8 @@
 //   Orbit (ORBIT) — top-down view of the 500 km orbit. Satellite position comes from
 //   the telemetry frame, the eclipse shadow, imaging, ground-contact and maneuver
 //   arcs match the simulator's orbital schedule, and the satellite is coloured by
-//   ASTRIX's current detection severity, not by the injected fault — the operator
-//   knows what was injected; the view shows what ASTRIX has concluded.
+//   Astrix's current detection severity, not by the injected fault — the operator
+//   knows what was injected; the view shows what Astrix has concluded.
 //
 // Snapshots arrive at 2–10 Hz; the canvas interpolates between them at display
 // rate so motion is smooth regardless of the telemetry interval.

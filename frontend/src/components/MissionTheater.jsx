@@ -2,9 +2,9 @@
 // current phase.
 //
 // During launch that is the ascent itself — altitude, speed, loads, propellant and
-// the milestone checklist. In orbit it is ASTRIX's live analysis: current
+// the milestone checklist. In orbit it is Astrix's live analysis: current
 // severity and score, which subsystem it implicates, and the fault timeline, which
-// measures in spacecraft seconds how long ASTRIX took to detect, alarm, diagnose
+// measures in spacecraft seconds how long Astrix took to detect, alarm, diagnose
 // and act after a fault was injected.
 
 import { INK, SERIES, SEVERITY_COLOR, STATUS } from '../theme'
@@ -19,7 +19,7 @@ const PHASE_LABEL = {
   ASCENT: 'Powered ascent',
   ORBIT_INSERTION: 'Orbit insertion',
   DEPLOYMENT: 'Satellite deployment',
-  ORBIT: 'On orbit · ASTRIX monitoring',
+  ORBIT: 'On orbit · Astrix monitoring',
   STOPPED: 'Mission stopped',
   FAILED: 'Runner failed',
 }
@@ -139,7 +139,7 @@ function LaunchSide({ launch, milestones, phase }) {
       </ol>
       {phase === 'IDLE' && (
         <p className="small muted" style={{ margin: 0, lineHeight: 1.5 }}>
-          Start the mission to fly the launch. Once the satellite is deployed and settled, ASTRIX
+          Start the mission to fly the launch. Once the satellite is deployed and settled, Astrix
           begins monitoring and faults can be injected.
         </p>
       )}
@@ -158,7 +158,7 @@ const LAUNCH_TIMELINE = [
   { key: 'orbit_insertion', t: 520, title: 'Orbit insertion (500 km)' },
   { key: 'payload_separation', t: 560, title: 'Payload separation' },
   { key: 'arrays_deployed', t: 590, title: 'Solar arrays deployed' },
-  { key: 'detumble_complete', t: 620, title: 'Detumble complete → ASTRIX online' },
+  { key: 'detumble_complete', t: 620, title: 'Detumble complete → Astrix online' },
 ]
 
 // ------------------------------------------------------------------- orbit
@@ -223,7 +223,7 @@ function FaultTimeline({ timeline, mission }) {
   if (!timeline) {
     return (
       <div className="timeline empty-timeline small muted">
-        No fault injected yet. Let the nominal orbit run to show ASTRIX staying quiet through eclipse,
+        No fault injected yet. Let the nominal orbit run to show Astrix staying quiet through eclipse,
         imaging passes and ground contacts, then inject a fault.
       </div>
     )
@@ -282,7 +282,7 @@ function BenignVerdict({ timeline }) {
   }
   return (
     <p className="small" style={{ color: STATUS.good, margin: 0 }}>
-      No alarm so far — ASTRIX is treating the excursion as explained by context.
+      No alarm so far — Astrix is treating the excursion as explained by context.
     </p>
   )
 }

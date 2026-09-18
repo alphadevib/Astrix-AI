@@ -1,4 +1,4 @@
-// The ASTRIX loop, rendered as the spine of the dashboard.
+// The Astrix loop, rendered as the spine of the dashboard.
 //
 // This is the single most useful thing on the screen during a demo: it shows
 // which stages ran for the current cycle, which one stopped the loop, and why.

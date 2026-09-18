@@ -28,11 +28,20 @@ async function shoot(page, name) {
   await page.screenshot({ path: path.join(shotDir, `${name}.png`), fullPage: false })
 }
 
+// Every route is account-gated; the page's own session token authorises these calls.
+function authed(page, path, method = 'GET') {
+  return page.evaluate(
+    async ([p, m]) => {
+      const token = localStorage.getItem('astrix.session')
+      const response = await fetch(p, { method: m, headers: { Authorization: `Bearer ${token}` } })
+      return response.json()
+    },
+    [path, method],
+  )
+}
+
 async function phase(page) {
-  return page.evaluate(async () => {
-    const response = await fetch('/mission/status')
-    return (await response.json()).phase
-  })
+  return (await authed(page, '/mission/status')).phase
 }
 
 async function waitForPhase(page, wanted, timeoutMs) {
@@ -50,7 +59,8 @@ const browser = await chromium.launch({ headless: !process.argv.includes('--head
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
 
 page.on('console', (message) => {
-  if (message.type() === 'error') problems.push(`console: ${message.text()}`)
+  // The sign-in gate answers 401 before the test's session exists.
+  if (message.type() === 'error' && !/401/.test(message.text())) problems.push(`console: ${message.text()}`)
 })
 page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`))
 
@@ -58,7 +68,15 @@ try {
   // The results notice is acknowledged once per session; pre-acknowledge it so
   // the dialog does not cover the controls this script clicks.
   await page.goto(`${url}/app#/assurance`, { waitUntil: 'networkidle' })
-  await page.evaluate(() => sessionStorage.setItem('astrix.noticeAcknowledged.v1', '1'))
+  await page.evaluate(async () => {
+    sessionStorage.setItem('astrix.noticeAcknowledged.v1', '1')
+    const response = await fetch('/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `ui-smoke-${Date.now()}@example.com`, password: 'orbit-Transfer-42' }),
+    })
+    localStorage.setItem('astrix.session', (await response.json()).token)
+  })
   await page.reload({ waitUntil: 'networkidle' })
   await page.getByRole('heading', { name: 'Overview' }).waitFor()
   // A stopped mission must still render the view rather than a blank panel.
@@ -89,7 +107,7 @@ try {
   problems.push(`flow: ${error.message}`)
   await shoot(page, '99-failure').catch(() => {})
 } finally {
-  await page.evaluate(() => fetch('/mission/stop', { method: 'POST' })).catch(() => {})
+  await authed(page, '/mission/stop', 'POST').catch(() => {})
   await browser.close()
 }
 

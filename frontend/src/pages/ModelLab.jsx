@@ -11,8 +11,16 @@ import { InlineNotice } from '../components/Disclaimer'
 import { Empty, Panel, Pill, fmt } from '../components/primitives'
 import { INK, STATUS } from '../theme'
 
+let lastStatus = null
+
 export default function ModelLab() {
-  const [status, setStatus] = useState(null)
+  // Seeded from the last visit so the page paints at once; the fetch below
+  // then replaces it with fresh data.
+  const [status, setStatusState] = useState(() => lastStatus)
+  const setStatus = (value) => {
+    lastStatus = value
+    setStatusState(value)
+  }
   const [busy, setBusy] = useState(null)
   const [message, setMessage] = useState(null)
   const [verify, setVerify] = useState(null)
