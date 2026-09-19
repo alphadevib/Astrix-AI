@@ -12,6 +12,7 @@ joins mid-demo sees the agent activity that led to the current state.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
@@ -37,7 +38,7 @@ async def telemetry_socket(websocket: WebSocket) -> None:
         token = websocket.query_params.get("token", "").strip()
         machine = settings.api_token
         ok = bool(token) and (
-            (bool(machine) and token == machine) or astrix.auth.resolve(token) is not None
+            (bool(machine) and hmac.compare_digest(token.encode(), machine.encode())) or astrix.auth.resolve(token) is not None
         )
         if not ok:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Sign in to continue.")

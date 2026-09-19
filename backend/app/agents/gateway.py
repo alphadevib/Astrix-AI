@@ -1,9 +1,8 @@
 """Multi-model LLM gateway with runtime provider selection and robust fallback.
 
 Providers live in `providers.py`: Gemini, Groq, Hugging Face and a local Ollama
-runtime — the four whose credentials actually return completions — plus Astrix's
-own on-board Small LM, which needs no third party at all. Any provider with
-credentials configured is usable.
+runtime — the four whose credentials actually return completions. Only providers
+with credentials configured are offered.
 
 Routing:
 - The *active* provider is tried first. It is chosen by `ASTRIX_LLM_PROVIDER`
@@ -33,9 +32,13 @@ import httpx
 from pydantic import BaseModel
 
 from ..config import Settings
-from .providers import PROVIDER_MAP, PROVIDERS, RETIRED, ProviderSpec
+from .providers import PROVIDER_MAP, PROVIDERS, ProviderSpec
 
 log = logging.getLogger(__name__)
+
+# Upper bound on one provider's answer to an operator chat message before the
+# gateway moves on to the next provider. Agent calls keep the longer setting.
+CHAT_TIMEOUT_SECONDS = 12.0
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -81,9 +84,9 @@ class ModelGateway:
         self._disabled_reason: str | None = None
         self._ollama_models: list[str] = []
         self.ollama_available = False
-        # Astrix's own on-board model, constructed on first use by the
-        # `small_lm` property below.
-        self._small_lm = None
+        self._ollama_checked_at = float("-inf")
+        self._ollama_probe_running = False
+        self._clients: dict[float, httpx.Client] = {}
 
         # Keys given through ASTRIX_-prefixed settings count too.
         for env_name, value in (
@@ -96,14 +99,6 @@ class ModelGateway:
 
         self.active_provider = self._initial_provider()
 
-    @property
-    def small_lm(self):
-        if self._small_lm is None:
-            from ..training.small_llm import AstrixSmallLM
-
-            self._small_lm = AstrixSmallLM()
-        return self._small_lm
-
     # ------------------------------------------------------------------ #
     # Provider state
     # ------------------------------------------------------------------ #
@@ -115,16 +110,9 @@ class ModelGateway:
         wanted = (self.s.llm_provider or "auto").lower().strip()
         if wanted == "ollama":
             wanted = "local"
-        if wanted in ("small_llm", "astrix-small-lm", "astrix_small_lm", "small-llm"):
-            wanted = "small_llm"
-        if wanted in RETIRED:
-            # An .env left over from when the registry carried dead providers must
-            # not silently pin the console to a reasoner that no longer exists.
-            log.warning(
-                "ASTRIX_LLM_PROVIDER='%s' is no longer available (%s) — falling back to auto",
-                wanted,
-                RETIRED[wanted],
-            )
+        if wanted not in PROVIDER_MAP and wanted != "auto":
+            # A stale .env must not pin the console to a reasoner that no longer exists.
+            log.warning("ASTRIX_LLM_PROVIDER='%s' is not an available provider — falling back to auto", wanted)
             wanted = "auto"
         if wanted in PROVIDER_MAP:
             if wanted == "local":
@@ -141,10 +129,23 @@ class ModelGateway:
         self._disabled_reason = "No LLM provider configured (operating in deterministic mode)"
         return "deterministic"
 
-    def refresh_local(self) -> bool:
+    def _local_base(self) -> str:
+        # "localhost" makes Windows try ::1 before 127.0.0.1, and a refused
+        # loopback connection is retried for about a second on each address.
+        return self.s.local_model_url.rstrip("/").replace("//localhost", "//127.0.0.1")
+
+    def refresh_local(self, max_age: float = 0.0) -> bool:
+        """Probe Ollama, reusing a result younger than `max_age` seconds.
+
+        With Ollama stopped, every probe costs the full connect timeout, and the
+        provider picker asks on every page. Callers that only display status
+        pass a max age; selecting Ollama explicitly still probes fresh.
+        """
+        if max_age and time.monotonic() - self._ollama_checked_at < max_age:
+            return self.ollama_available
         try:
-            base = self.s.local_model_url.rstrip("/").removesuffix("/v1")
-            with httpx.Client(timeout=0.6) as client:
+            base = self._local_base().removesuffix("/v1")
+            with httpx.Client(timeout=httpx.Timeout(0.6, connect=0.3)) as client:
                 r = client.get(f"{base}/api/tags")
             if r.status_code == 200:
                 self._ollama_models = [m.get("name", "") for m in r.json().get("models", []) if m.get("name")]
@@ -152,12 +153,44 @@ class ModelGateway:
                 return True
         except Exception:  # noqa: BLE001
             pass
+        finally:
+            self._ollama_checked_at = time.monotonic()
         self.ollama_available = False
         return False
 
+    def refresh_local_in_background(self, max_age: float = 30.0) -> None:
+        """Refresh a stale Ollama status without making the caller wait for it."""
+        if time.monotonic() - self._ollama_checked_at < max_age or self._ollama_probe_running:
+            return
+        self._ollama_probe_running = True
+
+        def probe() -> None:
+            try:
+                self.refresh_local()
+            finally:
+                self._ollama_probe_running = False
+
+        threading.Thread(target=probe, name="ollama-probe", daemon=True).start()
+
+    def _http(self, timeout: float) -> httpx.Client:
+        """A pooled, keep-alive client per timeout.
+
+        A fresh client per call re-did DNS and the TLS handshake with the
+        provider on every message; reusing the connection skips both.
+        """
+        client = self._clients.get(timeout)
+        if client is None:
+            with self._lock:
+                client = self._clients.get(timeout)
+                if client is None:
+                    client = httpx.Client(
+                        timeout=timeout,
+                        limits=httpx.Limits(max_keepalive_connections=8, keepalive_expiry=120.0),
+                    )
+                    self._clients[timeout] = client
+        return client
+
     def configured(self, spec: ProviderSpec) -> bool:
-        if spec.kind == "small_llm":
-            return True
         if spec.kind == "ollama":
             return self.ollama_available
         return bool(spec.api_key()) and spec.resolved_base_url() is not None
@@ -193,8 +226,6 @@ class ModelGateway:
         provider = provider.lower().strip()
         if provider == "ollama":
             provider = "local"
-        if provider in ("small_llm", "astrix-small-lm", "astrix_small_lm", "small-llm"):
-            provider = "small_llm"
         if provider == "deterministic":
             self.active_provider = "deterministic"
             self._selected_model = None
@@ -202,8 +233,6 @@ class ModelGateway:
             return self.status
         spec = PROVIDER_MAP.get(provider)
         if spec is None:
-            if provider in RETIRED:
-                raise ValueError(f"{provider} was {RETIRED[provider]}")
             raise KeyError(f"unknown provider '{provider}'")
         if spec.kind == "ollama":
             self.refresh_local()
@@ -238,8 +267,11 @@ class ModelGateway:
         }
 
     def catalogue(self) -> list[dict[str, Any]]:
+        """Providers the operator can actually pick: a key is set, or Ollama is running."""
         out = []
         for spec in PROVIDERS:
+            if not self.configured(spec):
+                continue
             models = list(spec.models)
             if spec.kind == "ollama":
                 models = list(dict.fromkeys(self._ollama_models + models))
@@ -269,7 +301,7 @@ class ModelGateway:
         if self.active_provider in PROVIDER_MAP:
             order.append(PROVIDER_MAP[self.active_provider])
         for spec in PROVIDERS:
-            if spec not in order and spec.kind not in ("ollama", "small_llm") and self.configured(spec):
+            if spec not in order and spec.kind != "ollama" and self.configured(spec):
                 order.append(spec)
         return [spec for spec in order if not self._benched(spec.key)]
 
@@ -317,7 +349,7 @@ class ModelGateway:
         for spec in self._order():
             model = self.model_for(spec, "fast")
             try:
-                text = self._complete(spec, model, system, messages, max_tokens, None)
+                text = self._complete(spec, model, system, messages, max_tokens, None, timeout=CHAT_TIMEOUT_SECONDS)
                 if text:
                     self._record(spec.key, True)
                     self.last_provider, self.last_model = spec.key, model
@@ -338,110 +370,19 @@ class ModelGateway:
         messages: list[dict[str, str]],
         max_tokens: int,
         output_model: type[BaseModel] | None,
+        timeout: float | None = None,
     ) -> str | None:
-        if spec.kind == "small_llm":
-            return self._call_small_llm(spec, model, system, messages, max_tokens, output_model)
-        if spec.kind == "small_llm":
-            return self._call_small_lm(messages)
         if spec.kind == "gemini":
-            return self._call_gemini(spec, model, system, messages, max_tokens, output_model)
+            return self._call_gemini(spec, model, system, messages, max_tokens, output_model, timeout)
         if spec.kind == "ollama":
-            base = self.s.local_model_url.rstrip("/")
+            base = self._local_base()
             return self._call_openai_compatible(spec, base, None, model, system, messages, max_tokens, output_model, timeout=max(45.0, self.s.llm_timeout_seconds))
         base = spec.resolved_base_url()
         if not base:
             return None
-        return self._call_openai_compatible(spec, base, spec.api_key(), model, system, messages, max_tokens, output_model)
-
-    def _call_small_llm(
-        self,
-        spec: ProviderSpec,
-        model: str,
-        system: str,
-        messages: list[dict[str, str]],
-        max_tokens: int,
-        output_model: type[BaseModel] | None,
-    ) -> str | None:
-        user_content = messages[-1]["content"] if messages else ""
-        if output_model is None:
-            sol = self.small_lm.solve_issue(user_content)
-            return (
-                f"AstrixSmallLM Diagnostic Decision:\n"
-                f"- Subsystem: {sol['decision']['diagnosis']['subsystem']}\n"
-                f"- Failure Mode: {sol['decision']['diagnosis']['failure_mode']}\n"
-                f"- Cause: {sol['decision']['diagnosis']['probable_cause']}\n"
-                f"- Action: {sol['decision']['recovery']['action_id']} ({sol['decision']['recovery']['rationale']})\n"
-                f"- Anomaly Filter: {sol['anomaly_filter_verdict']}\n"
-                f"- Model Version: {sol['decision']['model_version']}"
-            )
-
-        situation = self.small_lm._query_to_situation(user_content)
-        decision = self.small_lm.predict(situation)
-        fields = output_model.model_fields if hasattr(output_model, "model_fields") else {}
-
-        # 1. Diagnostic Agent (_Draft)
-        if "probable_cause" in fields and "evidence" in fields:
-            payload = {
-                "subsystem": decision["diagnosis"]["subsystem"],
-                "component": decision["diagnosis"]["component"],
-                "probable_cause": decision["diagnosis"]["probable_cause"],
-                "failure_mode": decision["diagnosis"]["failure_mode"],
-                "confidence": float(decision["diagnosis"]["confidence"]),
-                "evidence": [
-                    f"{p} deviation detected"
-                    for p in situation.get("deviating_parameters", ["attitude_error_deg"])
-                ],
-                "ruled_out": [
-                    "Sensor spoofing / single-channel transient"
-                    if not decision["problem_solving"]["is_sensor_spoof"]
-                    else "Genuine physical hardware fault"
-                ],
-            }
-            return json.dumps(payload)
-
-        # 2. Risk Agent (_Draft)
-        if "cascading_risks" in fields:
-            sev = decision["risk"]["severity"]
-            impact = "HIGH" if sev == "CRITICAL" else ("MEDIUM" if sev == "WARNING" else "LOW")
-            sub = decision["diagnosis"]["subsystem"]
-            payload = {
-                "mission_impact": impact,
-                "power_risk": "HIGH" if sub == "POWER" else "LOW",
-                "attitude_risk": "HIGH" if sub == "ADCS" else "LOW",
-                "thermal_risk": "HIGH" if sub == "THERMAL" else "LOW",
-                "communication_risk": "HIGH" if sub == "COMMS" else "LOW",
-                "time_to_impact_minutes": float(decision["risk"]["time_to_impact_minutes"]),
-                "cascading_risks": [f"{sub} {decision['diagnosis']['failure_mode']} propagation risk"],
-            }
-            return json.dumps(payload)
-
-        # 3. Recovery Agent (_Draft)
-        if "ranked_actions" in fields or "selected_action_id" in fields:
-            act_id = decision["recovery"]["action_id"]
-            rat = decision["recovery"]["rationale"]
-            payload = {
-                "ranked_actions": [{"action_id": act_id, "rationale": rat}],
-                "selected_action_id": act_id,
-            }
-            return json.dumps(payload)
-
-        # 4. Critic Agent (CriticReview)
-        if "confirmation_bias_detected" in fields or "sensor_spoofing_risk" in fields:
-            payload = {
-                "subsystem": decision["diagnosis"]["subsystem"],
-                "primary_cause": decision["diagnosis"]["probable_cause"],
-                "confirmation_bias_detected": False,
-                "sensor_spoofing_risk": "HIGH" if decision["problem_solving"]["is_sensor_spoof"] else "LOW",
-                "confidence_score": float(decision["diagnosis"]["confidence"]),
-                "counter_arguments": [decision["problem_solving"]["resolution_notes"]],
-                "ruled_out_hypotheses": [],
-                "consensus_recommendation": decision["problem_solving"]["recommendation"],
-                "evidence_weighting": {"subsystem_coherence": 0.95, "temporal_persistence": 0.9},
-            }
-            return json.dumps(payload)
-
-        return json.dumps(decision)
-
+        return self._call_openai_compatible(
+            spec, base, spec.api_key(), model, system, messages, max_tokens, output_model, timeout=timeout
+        )
 
     def _call_gemini(
         self,
@@ -451,6 +392,7 @@ class ModelGateway:
         messages: list[dict[str, str]],
         max_tokens: int,
         output_model: type[BaseModel] | None,
+        timeout: float | None = None,
     ) -> str | None:
         key = spec.api_key()
         if not key:
@@ -467,9 +409,9 @@ class ModelGateway:
             ],
             "generationConfig": config,
         }
-        with httpx.Client(timeout=self.s.llm_timeout_seconds) as client:
-            # Header auth keeps the key out of URLs and access logs.
-            resp = client.post(url, json=payload, headers={"x-goog-api-key": key})
+        client = self._http(timeout or self.s.llm_timeout_seconds)
+        # Header auth keeps the key out of URLs and access logs.
+        resp = client.post(url, json=payload, headers={"x-goog-api-key": key})
         if resp.status_code != 200:
             raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
         data = resp.json()
@@ -500,12 +442,12 @@ class ModelGateway:
         headers = dict(spec.headers)
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        with httpx.Client(timeout=timeout or self.s.llm_timeout_seconds) as client:
+        client = self._http(timeout or self.s.llm_timeout_seconds)
+        resp = client.post(url, json=payload, headers=headers)
+        if resp.status_code in (400, 422) and "response_format" in payload:
+            # Not every model supports JSON mode; the schema instruction still applies.
+            payload.pop("response_format")
             resp = client.post(url, json=payload, headers=headers)
-            if resp.status_code in (400, 422) and "response_format" in payload:
-                # Not every model supports JSON mode; the schema instruction still applies.
-                payload.pop("response_format")
-                resp = client.post(url, json=payload, headers=headers)
         if resp.status_code != 200:
             raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
         message = resp.json().get("choices", [{}])[0].get("message", {})

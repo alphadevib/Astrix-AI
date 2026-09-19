@@ -22,5 +22,5 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: OPENROUTER_API_KEY
+      - key: HF_TOKEN
         sync: false

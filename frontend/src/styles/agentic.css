@@ -276,12 +276,8 @@ code {
   cursor: pointer;
 }
 
-.picker-item:hover:not(:disabled):not(.static) {
+.picker-item:hover:not(:disabled) {
   background: var(--surface-2);
-}
-
-.picker-item.static {
-  cursor: default;
 }
 
 .picker-item-main {
@@ -301,24 +297,6 @@ code {
   color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.picker-provider.disabled .picker-item-main strong {
-  color: var(--ink-2);
-}
-
-.picker-link {
-  flex: none;
-  font-size: 12px;
-  color: var(--accent);
-  text-decoration: none;
-  padding: 3px 8px;
-  border: 1px solid var(--border-bright);
-  border-radius: 999px;
-}
-
-.picker-link:hover {
-  border-color: var(--accent);
 }
 
 .picker-tag {

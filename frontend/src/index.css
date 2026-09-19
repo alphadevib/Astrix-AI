@@ -382,28 +382,6 @@ body {
   white-space: nowrap;
 }
 
-.live-dot {
-  position: relative;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--good);
-  flex: none;
-}
-
-.live-dot.on::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 1px solid var(--good);
-  animation: ping 1.8s ease-out infinite;
-}
-
-.live-dot.off {
-  background: var(--ink-3);
-}
-
 @keyframes ping {
   from {
     transform: scale(0.6);

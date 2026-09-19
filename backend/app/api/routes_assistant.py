@@ -62,7 +62,9 @@ class ConversationRename(BaseModel):
 @router.get("/reasoner/providers", summary="Every reasoner provider, its free tier and configuration")
 async def reasoner_providers(astrix: AstrixDep) -> dict:
     gateway = astrix.llm.gateway
-    await asyncio.to_thread(gateway.refresh_local)
+    # Answer from the last Ollama probe; a stale one is refreshed behind this
+    # response rather than making the picker wait on a connect timeout.
+    gateway.refresh_local_in_background()
     return {"status": astrix.llm.status, "providers": gateway.catalogue()}
 
 
@@ -213,44 +215,12 @@ async def _handle_intent(astrix, text: str, body: ChatRequest) -> dict[str, Any]
             "navigate": "assurance",
         }
 
-    if re.search(r"\bclear\b.*\bfault\b", t) and "hardware" not in t and "board" not in t:
+    if re.search(r"\bclear\b.*\bfault\b", t):
         try:
             result = runner.clear_fault()
         except RuntimeError as exc:
             return {"reply": str(exc)}
         return {"reply": "Fault cleared." if result["cleared"] else "There was no active fault to clear."}
-
-    # ---- hardware ----------------------------------------------------------
-    if re.search(r"\b(hardware|board|arduino|prototype|device)\b", t):
-        from ..hardware import FAULTS as HW_FAULTS
-
-        hub = astrix.hardware
-        if "inject" in t:
-            key = _best_match(t, {k: v for k, v in HW_FAULTS.items()})
-            sev = 0.8
-            if sm := re.search(r"(\d{1,3})\s*%", t):
-                sev = min(1.0, int(sm.group(1)) / 100)
-            if key is None:
-                return {"reply": "Which fault? Options: " + ", ".join(f"`{k}`" for k in HW_FAULTS)}
-            item = hub.queue(f"INJECT {key} {sev:.2f}", source="assistant")
-            delivered = "It will be written to the board with the next telemetry exchange." if hub.connected else (
-                "No board is connected yet — it will be delivered once one connects on **Hardware Link**."
-            )
-            return {"reply": f"Queued `{item['command']}`. {delivered}", "navigate": "hardware"}
-        if "clear" in t:
-            hub.queue("CLEAR", source="assistant")
-            return {"reply": "Queued `CLEAR` for the board."}
-        st = hub.status()
-        if not st["connected"]:
-            return {"reply": "No hardware connected. Open **Hardware Link** and connect a board over USB (Chrome/Edge), or run the serial bridge.", "navigate": "hardware"}
-        latest = st["latest"] or {}
-        return {
-            "reply": (
-                f"**{st['device']['dev']}** (fw {st['device']['fw']}) over {st['transport']} — "
-                f"{'calibrated' if st['calibrated'] else 'calibrating'}. Fault on board: `{latest.get('fault')}`, mode `{latest.get('mode')}`."
-            ),
-            "cards": [{"kind": "hardware", "data": latest}],
-        }
 
     if re.search(r"\binject\b", t) and not re.search(r"\b(intercept|missile|interceptor)\b", t):
         from telemetry.scenarios import SCENARIOS

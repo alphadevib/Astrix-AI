@@ -25,11 +25,6 @@ const CAPABILITIES = [
     icon: 'M12 2c3 2.5 4.5 6 4.5 10.5V17h-9v-4.5C7.5 8 9 4.5 12 2zM7.5 14L5 17v3l2.5-1.5M16.5 14l2.5 3v3l-2.5-1.5',
   },
   {
-    title: 'Hardware Link',
-    body: 'Plug an Arduino prototype into the browser. Stream real sensors, inject faults on the chip, and let Astrix drive real actuators.',
-    icon: 'M6 6h12v12H6zM9.5 9.5h5v5h-5zM9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4',
-  },
-  {
     title: 'Astrix-LM',
     body: 'Every verified decision becomes an encrypted, hash-chained training example for Astrix’s own on-board model.',
     icon: 'M6 4a2 2 0 100 4 2 2 0 000-4zM18 4a2 2 0 100 4 2 2 0 000-4zM6 16a2 2 0 100 4 2 2 0 000-4zM18 16a2 2 0 100 4 2 2 0 000-4zM12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z',
@@ -47,7 +42,6 @@ const PROVIDERS = [
   { name: 'Groq', note: 'LPU inference' },
   { name: 'Hugging Face', note: 'Inference API' },
   { name: 'Ollama', note: 'local, air-gapped' },
-  { name: 'Astrix Small LM', note: 'on-board' },
   { name: 'Deterministic', note: 'always on' },
 ]
 
@@ -74,7 +68,7 @@ function ConsolePreview() {
             <span>Astrix</span>
           </div>
           <span className="l-window-new">+ New conversation</span>
-          {['Astrix', 'Flight Assurance', 'Intercept Lab', 'Vehicle Studio', 'Hardware Link'].map((label, i) => (
+          {['Astrix', 'Flight Assurance', 'Intercept Lab', 'Vehicle Studio'].map((label, i) => (
             <span key={label} className={`l-window-nav ${i === 1 ? 'on' : ''}`}>
               {label}
             </span>
@@ -129,7 +123,6 @@ export default function Landing() {
         </a>
         <nav aria-label="Sections">
           <a href="#capabilities">Capabilities</a>
-          <a href="#hardware">Hardware</a>
           <a href="#astrix-lm">Astrix-LM</a>
           <a href="#safety">Safety</a>
         </nav>
@@ -152,8 +145,8 @@ export default function Landing() {
           </a>
           <h1>Find the failure before the flight does.</h1>
           <p className="l-lead">
-            Astrix launches, stresses and recovers simulated spacecraft, checks interceptor trajectories, sizes custom
-            rockets and drives real Arduino prototypes — with an AI loop that detects, reasons, verifies and learns.
+            Astrix launches, stresses and recovers simulated spacecraft, checks interceptor trajectories, and sizes custom
+            rockets — with an AI loop that detects, reasons, verifies and learns.
           </p>
           <div className="l-cta">
             <a className="l-btn primary" href="/app">
@@ -193,35 +186,6 @@ export default function Landing() {
               </article>
             ))}
           </div>
-        </section>
-
-        <section className="l-section l-split" id="hardware">
-          <div>
-            <p className="l-eyebrow">Hardware in the loop</p>
-            <h2>
-              From simulator to <span className="l-hl">bench</span>
-            </h2>
-            <p>
-              Flash the Astrix HIL firmware onto an Arduino Uno, Nano, Mega, ESP32 or RP2040. The console talks to it over
-              Web Serial straight from the browser. Calibrated readings perturb the orbiting spacecraft; approved recovery
-              actions switch real motors and loads.
-            </p>
-            <ul className="l-list">
-              <li>Thermistor, bus voltage, current, light, IMU vibration and gyro, wheel RPM</li>
-              <li>Eight on-chip fault injections that ramp like real failures</li>
-              <li>Serial bridge for headless benches and CI</li>
-            </ul>
-          </div>
-          <pre className="l-code" aria-label="Serial protocol example">
-            <code>
-              <span className="c-dim">{'// board → console, 5 Hz'}</span>
-              {'\n{"temp_c":24.6,"bus_v":5.01,"vib_g":0.08,\n "rpm":2950,"fault":"NONE","mode":"NOMINAL"}\n\n'}
-              <span className="c-dim">{'// console → board'}</span>
-              {'\nINJECT VIB_SPIKE 0.8\nACT ISOLATE_WHEEL\n\n'}
-              <span className="c-dim">{'// board → console'}</span>
-              {'\n{"ack":"ACT ISOLATE_WHEEL","ok":true}'}
-            </code>
-          </pre>
         </section>
 
         <section className="l-section" id="astrix-lm">

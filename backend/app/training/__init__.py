@@ -27,7 +27,6 @@ from .mission_summary import (
 )
 from .nano import NanoModel
 from .novelty import OpenWorldAdvisor, describe, is_novel
-from .small_llm import AstrixSmallLM
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +47,6 @@ class ModelLab:
     ) -> None:
         self.corpus = TrainingCorpus(path, key)
         self.nano = NanoModel(self.corpus, Path(path).parent / "models")
-        self.small_lm = AstrixSmallLM(Path(path).parent / "models" / "astrix_small_lm.joblib")
         self.auto_train_every = max(0, auto_train_every)
         self.mission_summaries_enabled = mission_summaries
         self.open_world_enabled = open_world
@@ -184,7 +182,6 @@ class ModelLab:
         return {
             "corpus": self.corpus.stats(),
             "nano": self.nano.status(),
-            "small_lm": self.small_lm.status(),
             "auto_train_every": self.auto_train_every,
             "last_auto_train": self.last_auto_train,
             "mission_summaries": {
@@ -200,7 +197,6 @@ class ModelLab:
 
 
 __all__ = [
-    "AstrixSmallLM",
     "ModelLab",
     "NanoModel",
     "OpenWorldAdvisor",

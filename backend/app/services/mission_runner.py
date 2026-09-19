@@ -46,11 +46,9 @@ class MissionRunner:
         self,
         pipeline: AstrixPipeline,
         spacecraft_id: str = "ASTRIX-01",
-        hardware=None,
         model_lab=None,
     ) -> None:
         self.pipeline = pipeline
-        self.hardware = hardware  # HardwareHub | None — real sensors blended into telemetry
         self.model_lab = model_lab  # ModelLab | None — captures the end-of-mission summary
         self._vehicle: dict | None = None
         self._plan = None
@@ -274,8 +272,6 @@ class MissionRunner:
     async def _step(self) -> TelemetryFrame:
         assert self._sim is not None
         frame = self._sim.step()
-        if self.hardware is not None:
-            frame = self.hardware.overlay(frame)
         # The pipeline is synchronous and may make a blocking LLM call, so it runs
         # off the event loop.
         await asyncio.to_thread(self.pipeline.ingest, frame)
@@ -292,12 +288,6 @@ class MissionRunner:
             del self.commands_applied[:-50]
             log.info("command applied to spacecraft: %s -> %s", command["action_id"], effect)
             self.pipeline.bus.publish("command_applied", record)
-            if self.hardware is not None and self.hardware.connected:
-                from ..hardware import action_to_command
-
-                hw_command = action_to_command(command["action_id"])
-                if hw_command:
-                    self.hardware.queue(hw_command, source="astrix-recovery")
 
     async def _run(self, include_launch: bool) -> None:
         try:
@@ -346,7 +336,6 @@ class MissionRunner:
             "simulated_seconds": round(sim.t, 1) if sim else 0.0,
             "launch": self.launch_state,
             "vehicle": self.vehicle_summary(),
-            "hardware_in_loop": bool(self.hardware and self.hardware.connected and self.hardware.baseline),
             "milestones": self.milestones,
             "queued_scenario": self._queued_scenario,
             "active_scenario": scenario.key if scenario else None,

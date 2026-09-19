@@ -101,10 +101,6 @@ class Astrix:
             bus=self.bus,
         )
 
-        # ---------- hardware-in-the-loop ----------
-        from .hardware import HardwareHub
-
-        self.hardware = HardwareHub(self.bus, stale_seconds=s.hardware_stale_seconds)
 
         # ---------- Astrix-LM training corpus ----------
         self.model_lab = None
@@ -124,16 +120,6 @@ class Astrix:
                 log.info("training corpus ready (%d examples)", self.model_lab.corpus.count())
             except Exception as exc:  # noqa: BLE001 — learning must never block operations
                 log.error("training corpus unavailable: %s", exc)
-
-        # On-board Small Language & Neural Decision Model
-        from .training.small_llm import AstrixSmallLM
-
-        self.small_lm = self.model_lab.small_lm if self.model_lab else AstrixSmallLM()
-        # Astrix's own model is a first-class reasoner, not just an endpoint: the
-        # gateway routes to it through its own lazy accessor, which is what lets
-        # the console answer an operational question with no third-party API.
-        if self.small_lm.is_trained:
-            log.info("on-board Small LM available as a reasoner (%s)", self.small_lm.version)
 
         # Set by main.py once the app owns an event loop.
         self.runner = None

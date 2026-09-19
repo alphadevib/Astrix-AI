@@ -22,9 +22,6 @@ SQLAlchemy==2.0.36
 # SQLite (the default) needs no driver.
 psycopg[binary]==3.2.3
 
-# --- agent reasoning ---
-anthropic>=0.42.0
-
 # --- Astrix-LM corpus encryption ---
 cryptography>=43.0
 

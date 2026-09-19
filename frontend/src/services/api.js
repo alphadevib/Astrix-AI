@@ -156,14 +156,6 @@ export const api = {
   analyseVehicle: (design) => post('/vehicles/analyse', design),
   generateVehicle: (prompt, useLlm = true) => post('/vehicles/generate', { prompt, use_llm: useLlm }),
 
-  // --- hardware in the loop ---
-  hardwareStatus: () => get('/hardware/status'),
-  hardwareTelemetry: (readings, acks = [], transport = 'web-serial') =>
-    post('/hardware/telemetry', { readings, acks, transport }),
-  hardwareCommand: (command, delivery = 'queue') => post('/hardware/command', { command, delivery }),
-  hardwareCalibrate: () => post('/hardware/calibrate'),
-  hardwareOverlay: (enabled) => post('/hardware/overlay', { enabled }),
-  hardwareDisconnect: () => post('/hardware/disconnect'),
 
   // --- astrix-lm ---
   modelStatus: () => get('/model/status'),

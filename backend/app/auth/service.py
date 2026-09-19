@@ -142,6 +142,7 @@ class AuthService:
         name: str = "",
         organisation: str = "",
         role: str = "flight-director",
+        user_agent: str = "",
     ) -> tuple[Principal, str]:
         email = normalise_email(email)
         name = name.strip()
@@ -170,7 +171,7 @@ class AuthService:
                 db.rollback()
                 raise AuthError("An account with that email already exists.", 409) from None
             db.refresh(user)
-            return self._open_session(db, user)
+            return self._open_session(db, user, user_agent)
 
     def login(self, email: str, password: str, user_agent: str = "") -> tuple[Principal, str]:
         email = normalise_email(email)

@@ -5,7 +5,6 @@ import Auth from './pages/Auth'
 import api from './services/api'
 import session from './services/auth'
 import useMissionStream from './services/useMissionStream'
-import useHardwareLink from './services/useHardwareLink'
 import './index.css'
 import './styles/agentic.css'
 // Last, so its tokens re-point the older sheets' variables.
@@ -15,7 +14,6 @@ const Assistant = lazy(() => import('./pages/Assistant'))
 const FlightAssurance = lazy(() => import('./pages/FlightAssurance'))
 const InterceptLab = lazy(() => import('./pages/InterceptLab'))
 const VehicleStudio = lazy(() => import('./pages/VehicleStudio'))
-const HardwareLink = lazy(() => import('./pages/HardwareLink'))
 const ModelLab = lazy(() => import('./pages/ModelLab'))
 const MissionMemory = lazy(() => import('./pages/MissionMemory'))
 
@@ -43,12 +41,6 @@ export const PAGES = [
     key: 'studio',
     label: 'Vehicle Studio',
     description: 'Design custom rockets and satellites, then fly them',
-    group: 'workspace',
-  },
-  {
-    key: 'hardware',
-    label: 'Hardware Link',
-    description: 'Arduino prototypes in the loop: live telemetry, commands and fault injection',
     group: 'workspace',
   },
   {
@@ -183,7 +175,6 @@ function Workspace({ user, onUserUpdated }) {
   // remounts then — and not when the server assigns an id to a new one.
   const [chatKey, setChatKey] = useState(0)
   const stream = useMissionStream()
-  const hardware = useHardwareLink()
 
   const setVehicle = useCallback((design) => {
     setVehicleState(design)
@@ -298,7 +289,6 @@ function Workspace({ user, onUserUpdated }) {
         {page === 'assurance' && <FlightAssurance stream={stream} vehicle={vehicle} />}
         {page === 'intercept' && <InterceptLab />}
         {page === 'studio' && <VehicleStudio design={vehicle} onDesign={setVehicle} navigate={navigate} />}
-        {page === 'hardware' && <HardwareLink link={hardware} stream={stream} />}
         {page === 'model' && <ModelLab />}
         {page === 'memory' && <MissionMemory />}
       </Suspense>

@@ -2,17 +2,12 @@
 
 Every provider Astrix can reason with, in the order `auto` prefers them.
 
-This list is deliberately short. It previously carried eleven providers, eight of
-which had no key and two of which had keys that returned `429 no credits
-remaining` and `400 credit balance is too low` on every call — so the picker
-advertised ten reasoners and the gateway spent a timeout discovering that three
-quarters of them were dead before falling back. What is left is what answered a
-live request:
+Only providers whose credentials answered a live request are listed:
 
     gemini · groq · huggingface · local (Ollama)
 
-plus `astrix-lm`, Astrix's own model, which needs no third party at all. Adding a
-provider back is a four-line `ProviderSpec` — but it belongs here only once its
+A fine-tuned `astrix-lm` (scripts/train_astrix_lm.py) is served through Ollama.
+Adding a provider is a short `ProviderSpec` — but it belongs here only once its
 key actually returns a completion.
 
 Most providers speak the OpenAI chat-completions dialect, so one client covers
@@ -114,31 +109,6 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         free_tier="Runs on your machine; no key, no rate limit, works air-gapped",
         signup_url="https://ollama.com/download",
     ),
-    ProviderSpec(
-        key="small_llm",
-        label="Astrix Small LM (On-board)",
-        kind="small_llm",
-        env_keys=(),
-        deep_model="astrix-small-lm-v1",
-        fast_model="astrix-small-lm-v1",
-        models=("astrix-small-lm-v1",),
-        tier="local",
-        free_tier="On-board multi-head neural decision model trained on 100 real-time issues; runs 100% offline",
-        signup_url="",
-    ),
 )
 
 PROVIDER_MAP: dict[str, ProviderSpec] = {p.key: p for p in PROVIDERS}
-
-# Providers that were removed, and why. Kept as data so the picker can explain a
-# stale `ASTRIX_LLM_PROVIDER` or an old bookmark instead of silently ignoring it.
-RETIRED: dict[str, str] = {
-    "anthropic": "removed — the configured key returns 'credit balance is too low'",
-    "openai": "removed — the configured key returns 'no credits remaining'",
-    "openrouter": "removed — never configured",
-    "mistral": "removed — never configured",
-    "cohere": "removed — never configured",
-    "cloudflare": "removed — never configured",
-    "nvidia": "removed — never configured",
-    "cerebras": "removed — never configured",
-}

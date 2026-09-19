@@ -166,7 +166,7 @@ export default function AppShell({
   onNewChat,
   children,
 }) {
-  const { connected, mission, latest, detection, approval } = stream
+  const { mission, latest, detection, approval } = stream
   const page = pages.find((p) => p.key === current) ?? pages[0]
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [drawer, setDrawer] = useState(false)
@@ -194,9 +194,6 @@ export default function AppShell({
 
   const badges = { assurance: approval ? 1 : 0 }
   const running = Boolean(mission?.running)
-  const failed = mission?.phase === 'FAILED'
-  const phaseColor = failed ? STATUS.critical : running ? STATUS.good : INK.muted
-  const phaseLabel = running ? fmt.title(mission.phase).toLowerCase() : failed ? 'runner failed' : 'idle'
   const severity = detection?.suppressed ? 'NORMAL' : detection?.severity
   const inOrbit = running && mission?.phase === 'ORBIT'
   const groups = [
@@ -242,10 +239,6 @@ export default function AppShell({
         </nav>
 
         <div className="sidebar-foot">
-          <div className="sidebar-status" role="status" title={connected ? 'Telemetry feed live' : 'Backend unreachable'}>
-            <span className={`live-dot ${connected ? 'on' : 'off'}`} />
-            <span>{connected ? 'Connected' : 'Offline'}</span>
-          </div>
           <AccountChip user={user} onOpenProfile={() => setProfile(true)} onSignOut={onSignOut} />
         </div>
       </aside>
@@ -274,7 +267,6 @@ export default function AppShell({
                 <Pill color={SEVERITY_COLOR[severity] ?? INK.muted}>{severity}</Pill>
               </span>
             )}
-            <Pill color={phaseColor}>{phaseLabel}</Pill>
           </div>
         </header>
 

@@ -33,11 +33,10 @@ detection, safety, simulation, ontological knowledge graph and memory layers are
 | Area | What it does |
 |---|---|
 | **Landing page** (`/`) | Public overview. Lightweight, and loads no console code. |
-| **Astrix** (`/app#/assistant`) | Chat-style home. Say *launch mission*, *inject wheel degradation*, *approve*, *design a 3-stage rocket for a 400 kg satellite to 700 km*, *run an intercept check with seeker dropout*, *inject brownout on hardware*, *train model*, *use groq*. Commands run through the same verified services as the buttons. Free-form questions go to the active reasoner. |
+| **Astrix** (`/app#/assistant`) | Chat-style home. Say *launch mission*, *inject wheel degradation*, *approve*, *design a 3-stage rocket for a 400 kg satellite to 700 km*, *run an intercept check with seeker dropout*, *train model*, *use groq*. Commands run through the same verified services as the buttons. Free-form questions go to the active reasoner. |
 | **Flight Assurance** | Spacecraft anomaly testing before and after launch: fly the ascent (reference or custom vehicle, nominal or with a launch fault), then inject on-orbit faults and watch the detect → recover → learn loop. |
 | **Intercept Lab** | Missile trajectory testing: pre-flight GO/NO-GO, predicted intercept point and miss distance, then vehicle faults or cyber attacks during the engagement. |
 | **Vehicle Studio** | Design rockets (1–4 stages) and satellites by hand, from presets or from a plain-English prompt. It reports Δv, T/W, loss budget, orbit margin and power budget, previews the ascent, and flies the design in the 2D launch panel. Undersized vehicles abort; they never get an orbit they did not earn. |
-| **Hardware Link** | Arduino prototypes in the loop over Web Serial (or the built-in emulator): live sensors, commands, and on-chip fault injection. Readings perturb the orbiting spacecraft, and recovery actions drive real actuators. See [hardware/README.md](hardware/README.md). |
 | **Astrix-LM** | Captures verified decisions in an encrypted, hash-chained corpus, trains Astrix's own nano model (shadow-scored against live decisions), and exports JSONL to LoRA fine-tune a small open LLM that runs through Ollama (`scripts/train_astrix_lm.py`). |
 | **Mission Memory** | Knowledge profile, lessons, anomaly history and audit trail. |
 
@@ -50,17 +49,10 @@ pauses a provider for 60 s after repeated failures, and finally uses the determi
 
 | Provider | Env var | Free tier (Sept 2026, check before relying on it) | Default model |
 |---|---|---|---|
-| Google Gemini | `GEMINI_API_KEY` | Free Flash tier, no card | `gemini-2.5-flash` |
-| Groq | `GROQ_API_KEY` | ~30 req/min, ~1k req/day | `llama-3.3-70b-versatile` |
-| OpenRouter | `OPENROUTER_API_KEY` | `:free` models, ~50 req/day | `meta-llama/llama-3.3-70b-instruct:free` |
-| Mistral | `MISTRAL_API_KEY` | Experiment plan (opt in to data use) | `mistral-small-latest` |
-| Cohere | `COHERE_API_KEY` | Trial key, non-commercial | `command-a-03-2025` |
-| Hugging Face | `HF_TOKEN` | Small monthly credit | `meta-llama/Llama-3.3-70B-Instruct` |
-| Cloudflare Workers AI | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` | 10k Neurons/day | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| NVIDIA NIM | `NVIDIA_API_KEY` | Developer credits | `meta/llama-3.3-70b-instruct` |
-| Cerebras | `CEREBRAS_API_KEY` | Trial credit | `llama-3.3-70b` |
+| Google Gemini | `GEMINI_API_KEY` | Free Flash tier, no card | `gemini-flash-latest` |
+| Groq | `GROQ_API_KEY` | ~30 req/min, ~1k req/day | `openai/gpt-oss-120b` |
+| Hugging Face | `HF_TOKEN` | Small monthly credit | `Qwen/Qwen3-32B` |
 | Local Ollama | none | Unlimited, offline | `qwen3:8b` (also `llama3.2:3b`, `gemma3:4b`, `phi4-mini`, `astrix-lm`, …) |
-| Anthropic / OpenAI | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Paid | `claude-sonnet-5` / `gpt-4o` |
 
 Override any default model with `ASTRIX_<PROVIDER>_MODEL`, e.g. `ASTRIX_GROQ_MODEL=qwen/qwen3-32b`.
 Keys stay on the server and are never sent to the browser.
@@ -92,7 +84,8 @@ build time, so containers cold-start in seconds.
 1. Import the repo in Vercel and set **Root Directory** to `frontend`. `frontend/vercel.json`
    configures the build, the `/app` rewrite, immutable asset caching and security headers.
 2. Set `VITE_API_BASE=https://your-api.example.com` (build-time), or leave it empty and enter
-   the backend URL and API token in the console's **Settings** dialog.
+   the backend URL under **Profile and settings → Connection**. Operators sign in with an
+   account; there is no API key to paste.
 
 Performance: the landing page ships ~14 kB gzipped of JS. The console, each lab and the chart
 library are separate lazily loaded chunks, and the API gzips responses over 1 kB.
@@ -197,12 +190,10 @@ backend/app/
   simulation/  digital twin used to test plans before execution
   memory/      structured (SQL) and vector mission memory
   services/    the loop (pipeline), mission runner, telemetry buffer, event bus
-  hardware/    HIL hub (calibration, overlay, command allow-list) and serial bridge
   training/    encrypted hash-chained corpus and the Astrix-LM nano model
-  api/         REST + WebSocket surface, assistant, vehicles, hardware, model
+  api/         REST + WebSocket surface, assistant, vehicles, model
 telemetry/     spacecraft simulator, fault scenarios, launch profile, vehicle designs
 frontend/      landing page + React console (assistant, labs, 2D views, charts)
-hardware/      Arduino HIL firmware and wiring guide
 training/      Ollama Modelfile for a fine-tuned Astrix-LM
 scripts/       scenario runner, detection evaluation, LoRA fine-tuning
 ```

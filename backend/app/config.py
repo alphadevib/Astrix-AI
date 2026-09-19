@@ -21,8 +21,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
 MODEL_DIR = DATA_DIR / "models"
 
-# pydantic-settings reads .env into Settings only; the Anthropic SDK looks in
-# os.environ. Export .env so ANTHROPIC_API_KEY set there reaches the SDK.
+# pydantic-settings reads .env into Settings only; provider specs look in
+# os.environ. Export .env so GROQ_API_KEY etc. set there reach them.
 # Real environment variables still win (override=False).
 load_dotenv(ROOT / ".env", override=False)
 
@@ -101,9 +101,6 @@ class Settings(BaseSettings):
     # catalogue or in mission memory looks like it).
     novelty_similarity_threshold: float = 0.42
 
-    # ---------- hardware-in-the-loop ----------
-    # Readings older than this stop overriding simulated telemetry.
-    hardware_stale_seconds: float = 5.0
 
     # ---------- memory ----------
     database_url: str = f"sqlite:///{(DATA_DIR / 'astrix.db').as_posix()}"

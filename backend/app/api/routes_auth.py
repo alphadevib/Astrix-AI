@@ -73,10 +73,11 @@ async def register(body: RegisterRequest, request: Request, astrix: AstrixDep) -
             body.name,
             body.organisation,
             body.role,
+            agent,
         )
     except AuthError as error:
         raise _fail(error) from None
-    return {"token": token, "user": astrix.auth.profile(principal.id), "user_agent": agent}
+    return {"token": token, "user": astrix.auth.profile(principal.id)}
 
 
 @router.post("/login", summary="Sign in and open a session")

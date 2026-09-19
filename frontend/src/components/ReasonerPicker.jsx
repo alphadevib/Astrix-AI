@@ -1,8 +1,7 @@
 // Reasoner selector, in the spirit of an AI workspace's model picker.
 //
-// Lists every provider the backend knows, marks which have keys configured and
-// which are free, and switches the active reasoner at runtime. Unconfigured
-// providers link to where a free key can be created.
+// Lists the providers the backend can actually use (a key is set, or Ollama is
+// running) and switches the active reasoner at runtime.
 
 import { useEffect, useRef, useState } from 'react'
 import api from '../services/api'
@@ -110,37 +109,25 @@ export default function ReasonerPicker({ health }) {
               <div key={tier} className="picker-group">
                 <div className="picker-group-label">{TIER_LABEL[tier]}</div>
                 {items.map((p) => (
-                  <div key={p.key} className={`picker-provider ${p.configured ? '' : 'disabled'}`}>
-                    {p.configured ? (
-                      <button
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={p.active && status?.available}
-                        className="picker-item"
-                        disabled={busy !== null}
-                        onClick={() => select(p.key)}
-                        title={p.free_tier}
-                      >
-                        <span className="picker-item-main">
-                          <strong>
-                            {p.label}
-                            {p.benched && <em className="picker-tag">cooling down</em>}
-                          </strong>
-                          <span>{p.default_model}</span>
-                        </span>
-                        {p.active && status?.available && <Icon name="check" size={16} />}
-                      </button>
-                    ) : (
-                      <div className="picker-item static" title={`Set ${p.env_keys.join(' / ')} on the backend`}>
-                        <span className="picker-item-main">
-                          <strong>{p.label}</strong>
-                          <span>{p.free_tier}</span>
-                        </span>
-                        <a className="picker-link" href={p.signup_url} target="_blank" rel="noreferrer">
-                          {p.tier === 'local' ? 'Install' : 'Get key'}
-                        </a>
-                      </div>
-                    )}
+                  <div key={p.key} className="picker-provider">
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={p.active && status?.available}
+                      className="picker-item"
+                      disabled={busy !== null}
+                      onClick={() => select(p.key)}
+                      title={p.free_tier}
+                    >
+                      <span className="picker-item-main">
+                        <strong>
+                          {p.label}
+                          {p.benched && <em className="picker-tag">cooling down</em>}
+                        </strong>
+                        <span>{p.default_model}</span>
+                      </span>
+                      {p.active && status?.available && <Icon name="check" size={16} />}
+                    </button>
                     {p.active && status?.available && p.models.length > 1 && (
                       <div className="picker-models">
                         {p.models.map((m) => (

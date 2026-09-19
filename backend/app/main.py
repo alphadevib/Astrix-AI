@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -28,7 +29,6 @@ from .api import (
     routes_assistant,
     routes_auth,
     routes_control,
-    routes_hardware,
     routes_intercept,
     routes_model,
     routes_stages,
@@ -49,6 +49,28 @@ logging.basicConfig(
 log = logging.getLogger("astrix")
 
 
+class _RedactTokens(logging.Filter):
+    """Keep session tokens out of the server log.
+
+    Browsers cannot put a header on a WebSocket, so the telemetry socket carries
+    the session token as `?token=`, and uvicorn logs every connection line with
+    its query string. Anyone with read access to the logs would otherwise hold
+    live sessions.
+    """
+
+    pattern = re.compile(r"(token=)[^&\s\"']+", re.IGNORECASE)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if "token=" in message.lower():
+            record.msg, record.args = self.pattern.sub(lambda m: m.group(1) + "[redacted]", message), ()
+        return True
+
+
+for _name in ("uvicorn.access", "uvicorn.error"):
+    logging.getLogger(_name).addFilter(_RedactTokens())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -62,7 +84,7 @@ async def lifespan(app: FastAPI):
     astrix = await asyncio.to_thread(Astrix, settings)
     astrix.bus.bind_loop(asyncio.get_running_loop())
     astrix.runner = MissionRunner(
-        astrix.pipeline, hardware=astrix.hardware, model_lab=astrix.model_lab
+        astrix.pipeline, model_lab=astrix.model_lab
     )
     app.state.astrix = astrix
 
@@ -175,7 +197,6 @@ app.include_router(routes_stages.router)
 app.include_router(routes_control.router)
 app.include_router(routes_intercept.router)
 app.include_router(routes_vehicles.router)
-app.include_router(routes_hardware.router)
 app.include_router(routes_model.router)
 app.include_router(routes_assistant.router)
 app.include_router(ws.router)
