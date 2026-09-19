@@ -1,16 +1,17 @@
-// The profile console: the account, its security, and which backend this
-// browser talks to. Replaces the old Settings dialog and its pasted API key —
+// The profile console: the account, the reasoner Astrix thinks with, and the
+// account's security. Replaces the old Settings dialog and its pasted API key —
 // the session is the only credential now.
 
 import { useEffect, useState } from 'react'
-import api, { apiBase, connection } from '../services/api'
+import api from '../services/api'
 import session from '../services/auth'
 import Icon from './icons'
+import ReasonerSettings from './ReasonerSettings'
 
 const TABS = [
   ['profile', 'Profile'],
+  ['reasoner', 'Reasoner'],
   ['security', 'Security'],
-  ['connection', 'Connection'],
 ]
 
 export function initials(user) {
@@ -24,8 +25,8 @@ function errorText(error) {
   return text === 'Failed to fetch' ? 'The backend is unreachable.' : text
 }
 
-export default function ProfileConsole({ user, onUserUpdated, onClose }) {
-  const [tab, setTab] = useState('profile')
+export default function ProfileConsole({ user, onUserUpdated, onClose, initialTab = 'profile' }) {
+  const [tab, setTab] = useState(initialTab)
 
   useEffect(() => {
     const onKey = (event) => event.key === 'Escape' && onClose()
@@ -70,8 +71,8 @@ export default function ProfileConsole({ user, onUserUpdated, onClose }) {
         </div>
         <div className="console-body" role="tabpanel">
           {tab === 'profile' && <ProfileTab user={user} onUserUpdated={onUserUpdated} />}
+          {tab === 'reasoner' && <ReasonerSettings />}
           {tab === 'security' && <SecurityTab />}
-          {tab === 'connection' && <ConnectionTab />}
         </div>
       </div>
     </div>
@@ -256,59 +257,6 @@ function describeAgent(agent = '') {
   return os ? `${browser} on ${os}` : browser
 }
 
-function ConnectionTab() {
-  const [base, setBase] = useState(apiBase())
-  const [state, setState] = useState(null)
-
-  const test = async () => {
-    const previous = apiBase()
-    connection.saveBase(base)
-    setState({ busy: true })
-    try {
-      const meta = await api.meta()
-      setState({ ok: `Connected to ${meta.app} ${meta.version}.` })
-    } catch (error) {
-      setState({ error: errorText(error) })
-    } finally {
-      connection.saveBase(previous)
-    }
-  }
-
-  const save = () => {
-    connection.saveBase(base)
-    // Sessions belong to a backend; a different one needs a fresh sign-in.
-    if (base.trim().replace(/\/$/, '') !== apiBase()) session.set('')
-    window.location.reload()
-  }
-
-  return (
-    <>
-      <p className="console-note">
-        Point this console at an Astrix backend. Leave it empty to use the same origin. Changing it signs you out,
-        since accounts live on the backend.
-      </p>
-      <label className="stack-field">
-        <span>Backend URL</span>
-        <input
-          type="text"
-          placeholder="https://astrix-api.example.com"
-          value={base}
-          onChange={(event) => setBase(event.target.value)}
-          autoComplete="url"
-        />
-      </label>
-      <Message state={state} />
-      <div className="console-actions">
-        <button type="button" className="btn" onClick={test} disabled={state?.busy}>
-          Test
-        </button>
-        <button type="button" className="btn primary" onClick={save}>
-          Save and reload
-        </button>
-      </div>
-    </>
-  )
-}
 
 function Message({ state }) {
   if (!state || state.busy) return null

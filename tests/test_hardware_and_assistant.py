@@ -76,8 +76,6 @@ def test_assistant_executes_commands(client):
     assert "orbit" in started["reply"].lower()
     design = chat("design a 2-stage rocket for a 300 kg imaging satellite to 600 km")
     assert design["cards"][0]["kind"] == "design"
-    intercept = chat("run an intercept check")
-    assert "Pre-flight check" in intercept["reply"]
     stopped = chat("stop mission")
     assert stopped["reply"] == "Mission stopped."
 

@@ -31,7 +31,6 @@ const apiPaths = [
   '/status',
   '/health',
   '/events',
-  '/intercept',
   '/meta',
   '/reasoner',
   '/assistant',

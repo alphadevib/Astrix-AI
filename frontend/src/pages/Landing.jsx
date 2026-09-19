@@ -4,7 +4,6 @@
 
 import { useEffect, useState } from 'react'
 import '../landing.css'
-import AstrixMark from '../components/AstrixMark'
 
 const LOOP = ['Detect', 'Remember', 'Diagnose', 'Assess', 'Plan', 'Simulate', 'Verify', 'Recover', 'Learn']
 
@@ -13,11 +12,6 @@ const CAPABILITIES = [
     title: 'Flight Assurance',
     body: 'Fly the ascent, stress it with launch faults, then inject on-orbit anomalies and watch Astrix detect, diagnose, plan and recover.',
     icon: 'M3 12h3l2.5-6 4 12 2.5-6H21',
-  },
-  {
-    title: 'Intercept Lab',
-    body: 'Check an interceptor’s trajectory and predicted intercept point, then inject seeker, guidance or cyber faults.',
-    icon: 'M12 4a8 8 0 100 16 8 8 0 000-16zM12 9a3 3 0 100 6 3 3 0 000-6zM12 1v4M12 19v4M1 12h4M19 12h4',
   },
   {
     title: 'Vehicle Studio',
@@ -64,11 +58,10 @@ function ConsolePreview() {
       <div className="l-window">
         <aside className="l-window-side">
           <div className="l-window-brand">
-            <AstrixMark size={18} tone="nebula" />
             <span>Astrix</span>
           </div>
           <span className="l-window-new">+ New conversation</span>
-          {['Astrix', 'Flight Assurance', 'Intercept Lab', 'Vehicle Studio'].map((label, i) => (
+          {['Astrix', 'Flight Assurance', 'Vehicle Studio', 'Mission Memory'].map((label, i) => (
             <span key={label} className={`l-window-nav ${i === 1 ? 'on' : ''}`}>
               {label}
             </span>
@@ -118,7 +111,6 @@ export default function Landing() {
     <div className={`landing ${scrolled ? 'scrolled' : ''}`}>
       <header className="l-nav">
         <a className="l-brand" href="/">
-          <AstrixMark size={28} tone="nebula" />
           <span>Astrix</span>
         </a>
         <nav aria-label="Sections">
@@ -145,7 +137,7 @@ export default function Landing() {
           </a>
           <h1>Find the failure before the flight does.</h1>
           <p className="l-lead">
-            Astrix launches, stresses and recovers simulated spacecraft, checks interceptor trajectories, and sizes custom
+            Astrix launches, stresses and recovers simulated spacecraft, designs and flies custom
             rockets — with an AI loop that detects, reasons, verifies and learns.
           </p>
           <div className="l-cta">
@@ -244,7 +236,7 @@ export default function Landing() {
             <div>
               <h2>Results are hypothetical</h2>
               <p>
-                Astrix runs on simulated spacecraft, first-order launch and intercept models, and advisory AI reasoning.
+                Astrix runs on simulated spacecraft, first-order launch and vehicle models, and advisory AI reasoning.
                 Nothing it produces is flight-qualified. Every result must be verified against real-time prototypes,
                 hardware-in-the-loop tests and uploaded flight or test data before it informs an engineering or
                 operational decision.
@@ -271,10 +263,9 @@ export default function Landing() {
       <footer className="l-footer">
         <div className="l-footer-brand">
           <a className="l-brand" href="/">
-            <AstrixMark size={24} tone="nebula" />
             <span>Astrix</span>
           </a>
-          <p>Agentic AI for spacecraft anomaly assurance, intercept testing and hardware-in-the-loop prototypes.</p>
+          <p>Agentic AI for spacecraft anomaly assurance, flight intelligence and vehicle design.</p>
         </div>
         <div className="l-footer-col">
           <strong>Product</strong>

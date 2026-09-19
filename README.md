@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/brand/astrix-logo.svg" alt="ASTRIX-AI Logo" width="520"/>
+# ASTRIX-AI
 
 ### AUTONOMOUS SPACECRAFT INTELLIGENCE &amp; EXECUTION
 **Detect &bull; Reason &bull; Plan &bull; Verify &bull; Recover &bull; Learn**
@@ -21,7 +21,7 @@ without one, every agent falls back to its deterministic reasoner seamlessly. Th
 detection, safety, simulation, ontological knowledge graph and memory layers are identical either way.
 
 > **Results are hypothetical.** Astrix-AI runs on simulated spacecraft, first-order
-> launch, intercept and vehicle models, and advisory AI reasoning. Every result must be
+> launch and vehicle models, and advisory AI reasoning. Every result must be
 > verified against real-time prototypes, hardware-in-the-loop tests and uploaded flight
 > or test data before it informs any engineering or operational decision. The console
 > shows this notice on every page and the API returns it in an `X-Astrix-Notice` header.
@@ -33,9 +33,8 @@ detection, safety, simulation, ontological knowledge graph and memory layers are
 | Area | What it does |
 |---|---|
 | **Landing page** (`/`) | Public overview. Lightweight, and loads no console code. |
-| **Astrix** (`/app#/assistant`) | Chat-style home. Say *launch mission*, *inject wheel degradation*, *approve*, *design a 3-stage rocket for a 400 kg satellite to 700 km*, *run an intercept check with seeker dropout*, *train model*, *use groq*. Commands run through the same verified services as the buttons. Free-form questions go to the active reasoner. |
+| **Astrix** (`/app#/assistant`) | Chat-style home. Say *launch mission*, *inject wheel degradation*, *approve*, *design a 3-stage rocket for a 400 kg satellite to 700 km*, *train model*, *use groq*. Commands run through the same verified services as the buttons. Free-form questions go to the active reasoner. |
 | **Flight Assurance** | Spacecraft anomaly testing before and after launch: fly the ascent (reference or custom vehicle, nominal or with a launch fault), then inject on-orbit faults and watch the detect → recover → learn loop. |
-| **Intercept Lab** | Missile trajectory testing: pre-flight GO/NO-GO, predicted intercept point and miss distance, then vehicle faults or cyber attacks during the engagement. |
 | **Vehicle Studio** | Design rockets (1–4 stages) and satellites by hand, from presets or from a plain-English prompt. It reports Δv, T/W, loss budget, orbit margin and power budget, previews the ascent, and flies the design in the 2D launch panel. Undersized vehicles abort; they never get an orbit they did not earn. |
 | **Astrix-LM** | Captures verified decisions in an encrypted, hash-chained corpus, trains Astrix's own nano model (shadow-scored against live decisions), and exports JSONL to LoRA fine-tune a small open LLM that runs through Ollama (`scripts/train_astrix_lm.py`). |
 | **Mission Memory** | Knowledge profile, lessons, anomaly history and audit trail. |
@@ -43,9 +42,11 @@ detection, safety, simulation, ontological knowledge graph and memory layers are
 ## Reasoners (free LLM providers)
 
 Every agent works without an LLM. Add any key below to the backend environment and pick
-the provider from the reasoner menu in the console's top bar, or set `ASTRIX_LLM_PROVIDER`.
+the provider under **Profile and settings → Reasoner**, or set `ASTRIX_LLM_PROVIDER`.
 The gateway tries the active provider first, falls back through every other configured one,
-pauses a provider for 60 s after repeated failures, and finally uses the deterministic reasoners.
+pauses a provider for 60 s after repeated failures, skips a provider that has hit its rate limit
+or credits until it resets, and finally uses the deterministic reasoners. The console warns when
+the active provider's allowance is running low or every reasoner is exhausted.
 
 | Provider | Env var | Free tier (Sept 2026, check before relying on it) | Default model |
 |---|---|---|---|
@@ -83,9 +84,8 @@ build time, so containers cold-start in seconds.
 
 1. Import the repo in Vercel and set **Root Directory** to `frontend`. `frontend/vercel.json`
    configures the build, the `/app` rewrite, immutable asset caching and security headers.
-2. Set `VITE_API_BASE=https://your-api.example.com` (build-time), or leave it empty and enter
-   the backend URL under **Profile and settings → Connection**. Operators sign in with an
-   account; there is no API key to paste.
+2. Set `VITE_API_BASE=https://your-api.example.com` (build-time), or leave it empty to use the
+   same origin. Operators sign in with an account; there is no API key to paste.
 
 Performance: the landing page ships ~14 kB gzipped of JS. The console, each lab and the chart
 library are separate lazily loaded chunks, and the API gzips responses over 1 kB.

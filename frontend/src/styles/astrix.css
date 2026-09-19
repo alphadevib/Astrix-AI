@@ -33,7 +33,7 @@
   --ink-2: #b4b1c9;
   --ink-3: #7d7a95;
 
-  /* The brand ramp. AstrixMark and AstrixOrb read these by name. */
+  /* The brand ramp. AstrixOrb reads these by name. */
   --brand-1: #4f39f6;
   --brand-2: #7c6cff;
   --brand-3: #a99bff;
@@ -92,8 +92,7 @@ body::before {
 h1,
 h2,
 h3,
-.brand-name,
-.astrix-wordmark-text {
+.brand-name {
   font-family: var(--display);
 }
 
@@ -109,28 +108,6 @@ h3,
 
 *::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.12);
-}
-
-/* --------------------------------------------------------------- the mark */
-
-.astrix-mark {
-  display: block;
-  flex: none;
-}
-
-.astrix-wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.astrix-wordmark-text {
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------- the orb */
@@ -603,27 +580,6 @@ h3,
 .topbar-title p {
   font-size: 13px;
   color: var(--ink-3);
-}
-
-.picker-button {
-  border-radius: 8px;
-  border-color: var(--border);
-  background: var(--surface-1);
-  font-family: var(--display);
-}
-
-.picker-button:hover,
-.picker-button[aria-expanded='true'] {
-  background: var(--surface-2);
-  border-color: var(--border-bright);
-}
-
-.picker-menu {
-  border-radius: 12px;
-  border-color: var(--border-bright);
-  background: rgba(10, 9, 18, 0.98);
-  backdrop-filter: blur(18px);
-  box-shadow: var(--shadow-lift);
 }
 
 /* ------------------------------------------------------------------- chat */

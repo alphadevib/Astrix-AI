@@ -35,6 +35,9 @@ class ProviderSpec:
     base_url: str = ""
     extra_env: tuple[str, ...] = ()  # non-secret values the base URL needs
     headers: dict[str, str] = field(default_factory=dict)
+    # Published free-tier requests per day, when the provider doesn't report it
+    # in response headers. Used only to warn before the allowance runs out.
+    daily_limit: int | None = None
 
     def api_key(self) -> str | None:
         for name in self.env_keys:
@@ -83,6 +86,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         tier="free",
         free_tier="Free plan, ~30 requests/min and ~1,000 requests/day on large models",
         signup_url="https://console.groq.com/keys",
+        daily_limit=1000,
     ),
     ProviderSpec(
         key="huggingface",

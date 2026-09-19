@@ -2,42 +2,25 @@
 //
 // Paths are relative so the Vite dev proxy (and any reverse proxy in front of a
 // build) handles routing. On Vercel the frontend and the API live on different
-// origins: set VITE_API_BASE at build time, or let the operator enter the backend
-// URL in the profile console (stored per browser).
+// origins: set VITE_API_BASE at build time.
 //
 // Every request carries the operator's session token. A 401 means the session
 // is gone, so the session is cleared and the console falls back to sign-in.
 
 import session from './auth'
 
-const BASE_KEY = 'astrix.apiBase'
-
-function readStorage(key) {
-  try {
-    return window.localStorage.getItem(key) || ''
-  } catch {
-    return ''
-  }
+// The profile console used to let each browser override the backend URL; drop
+// any value it left behind so it can't silently redirect requests.
+try {
+  window.localStorage.removeItem('astrix.apiBase')
+} catch {
+  /* storage unavailable */
 }
 
-function writeStorage(key, value) {
-  try {
-    if (value) window.localStorage.setItem(key, value)
-    else window.localStorage.removeItem(key)
-  } catch {
-    /* storage unavailable (private mode) — the value just won't persist */
-  }
-}
+const BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 
 export function apiBase() {
-  return (readStorage(BASE_KEY) || import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
-}
-
-export const connection = {
-  base: apiBase,
-  saveBase(base) {
-    writeStorage(BASE_KEY, (base ?? '').trim().replace(/\/$/, ''))
-  },
+  return BASE
 }
 
 const PASSWORD_CHECKS = ['/auth/login', '/auth/register', '/auth/password']
@@ -108,10 +91,6 @@ export const api = {
   stopMission: () => post('/mission/stop'),
   injectFault: (key) => post(`/mission/inject/${key}`),
   clearFault: () => post('/mission/clear-fault'),
-
-  // --- interceptor trajectory check ---
-  interceptFaults: () => get('/intercept/faults'),
-  simulateIntercept: (config) => post('/intercept/simulate', config),
 
   // --- telemetry ---
   history: (limit = 180, spacecraftId = 'ASTRIX-01') =>

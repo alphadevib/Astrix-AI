@@ -10,9 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { SEVERITY_COLOR, STATUS, INK } from '../theme'
 import Icon from './icons'
 import { Pill, fmt } from './primitives'
-import ReasonerPicker from './ReasonerPicker'
 import ProfileConsole, { initials } from './ProfileConsole'
-import AstrixMark from './AstrixMark'
 import { NoticeBar } from './Disclaimer'
 
 const COLLAPSE_KEY = 'astrix.sidebarCollapsed'
@@ -88,7 +86,26 @@ function ThreadList({ threads, activeId, onSelect, onDelete }) {
   )
 }
 
-function AccountChip({ user, onOpenProfile, onSignOut }) {
+// Shown whenever the active reasoner's allowance is low or every reasoner is
+// out of quota; opens the reasoner settings where another can be picked.
+function UsageWarning({ alert, onOpen }) {
+  if (!alert) return null
+  const exhausted = alert.level === 'exhausted'
+  return (
+    <button
+      type="button"
+      className={`usage-warning ${alert.level}`}
+      onClick={onOpen}
+      title={alert.message}
+      aria-label={`${exhausted ? 'Reasoner out of quota' : 'Reasoner limit running low'}: ${alert.message}`}
+    >
+      <Icon name="warning" size={15} />
+      <span>{exhausted ? 'Reasoner out of quota' : 'Reasoner limit low'}</span>
+    </button>
+  )
+}
+
+function AccountChip({ user, onOpenProfile, onOpenReasoner, onSignOut }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -125,6 +142,18 @@ function AccountChip({ user, onOpenProfile, onSignOut }) {
           >
             <Icon name="user" size={16} />
             Profile and settings
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="menu-item"
+            onClick={() => {
+              setOpen(false)
+              onOpenReasoner()
+            }}
+          >
+            <Icon name="model" size={16} />
+            Reasoner
           </button>
           <button type="button" role="menuitem" className="menu-item danger" onClick={onSignOut}>
             <Icon name="logout" size={16} />
@@ -170,7 +199,8 @@ export default function AppShell({
   const page = pages.find((p) => p.key === current) ?? pages[0]
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [drawer, setDrawer] = useState(false)
-  const [profile, setProfile] = useState(false)
+  // null, or the profile console tab to open.
+  const [profile, setProfile] = useState(null)
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -206,7 +236,6 @@ export default function AppShell({
       <aside className="sidebar" aria-label="Sidebar">
         <div className="sidebar-top">
           <a className="brand" href="/" title="Astrix home">
-            <AstrixMark size={24} tone="nebula" />
             <span className="brand-name">Astrix</span>
           </a>
           <button
@@ -239,7 +268,12 @@ export default function AppShell({
         </nav>
 
         <div className="sidebar-foot">
-          <AccountChip user={user} onOpenProfile={() => setProfile(true)} onSignOut={onSignOut} />
+          <AccountChip
+            user={user}
+            onOpenProfile={() => setProfile('profile')}
+            onOpenReasoner={() => setProfile('reasoner')}
+            onSignOut={onSignOut}
+          />
         </div>
       </aside>
       <div className="scrim" onClick={() => setDrawer(false)} aria-hidden="true" />
@@ -249,11 +283,11 @@ export default function AppShell({
           <button type="button" className="icon-btn menu-btn" onClick={() => setDrawer(true)} aria-label="Open menu">
             <Icon name="menu" />
           </button>
-          <ReasonerPicker health={stream.health} />
           <div className="topbar-title hide-sm">
             <p>{page.description}</p>
           </div>
           <div className="topbar-status">
+            <UsageWarning alert={stream.health?.llm?.alert} onOpen={() => setProfile('reasoner')} />
             {latest && inOrbit && (
               <span className="topbar-meta hide-sm">MET {fmt.num(mission?.simulated_seconds ?? latest.seq, 0)} s</span>
             )}
@@ -274,7 +308,15 @@ export default function AppShell({
         <NoticeBar />
       </div>
 
-      {profile && <ProfileConsole user={user} onUserUpdated={onUserUpdated} onClose={() => setProfile(false)} />}
+      {profile && (
+        <ProfileConsole
+          key={profile}
+          user={user}
+          initialTab={profile}
+          onUserUpdated={onUserUpdated}
+          onClose={() => setProfile(null)}
+        />
+      )}
     </div>
   )
 }

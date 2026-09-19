@@ -121,7 +121,7 @@ try {
   expect((await page.locator('.account-role', { hasText: 'Smoke Labs' }).count()) === 1, 'profile edit did not reach the chip')
 
   // Every lab page renders behind the gate.
-  for (const key of ['assurance', 'intercept', 'studio', 'hardware', 'model', 'memory']) {
+  for (const key of ['assurance', 'studio', 'hardware', 'model', 'memory']) {
     await page.goto(`${url}/app#/${key}`)
     await page.waitForTimeout(1200)
   }

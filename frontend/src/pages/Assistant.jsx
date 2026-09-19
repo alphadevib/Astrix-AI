@@ -10,14 +10,13 @@ import { useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Icon from '../components/icons'
 import Markdown from '../components/Markdown'
-import AstrixMark from '../components/AstrixMark'
 import AstrixOrb from '../components/AstrixOrb'
 import { fmt } from '../components/primitives'
 
 const SUGGESTIONS = [
   { title: 'Launch a mission', prompt: 'launch mission', note: 'fly the ascent, then monitor on orbit' },
   { title: 'Inject a fault', prompt: 'inject wheel degradation', note: 'once the satellite is on orbit' },
-  { title: 'Run an intercept check', prompt: 'run an intercept check with seeker dropout', note: 'trajectory + predicted intercept' },
+  { title: 'Explain the anomaly', prompt: 'explain', note: 'diagnosis, evidence and recovery' },
   { title: 'Design a vehicle', prompt: 'design a 3-stage rocket for a 400 kg imaging satellite to 700 km', note: 'rocket + satellite sizing' },
 ]
 
@@ -115,7 +114,7 @@ export default function Assistant({ conversationId, onThreadCreated, onTurn, onM
           <h1>
             What are we <span className="mark-hl">testing</span> today?
           </h1>
-          <p>Launch and stress a spacecraft, check an interceptor's trajectory, design a vehicle or drive a hardware prototype.</p>
+          <p>Launch and stress a spacecraft, recover it from faults, or design a custom rocket and satellite.</p>
         </div>
       ) : (
         <div className="chat-log" aria-live="polite" aria-busy={loading}>
@@ -129,9 +128,6 @@ export default function Assistant({ conversationId, onThreadCreated, onTurn, onM
           ))}
           {busy && (
             <div className="msg assistant">
-              <div className="msg-avatar">
-                <AstrixMark size={18} tone="nebula" />
-              </div>
               <div className="msg-body">
                 <span className="typing" aria-label="Astrix is working">
                   <i />
@@ -202,9 +198,6 @@ function Message({ message, navigate, onDesign }) {
   }
   return (
     <div className={`msg assistant ${message.error ? 'error' : ''}`}>
-      <div className="msg-avatar">
-        <AstrixMark size={18} tone="nebula" />
-      </div>
       <div className="msg-body">
         <Markdown text={message.content} />
         {message.cards?.map((card, i) => (
@@ -249,24 +242,6 @@ function Card({ card, navigate, onDesign }) {
             }}
           >
             Open in Vehicle Studio
-          </button>
-        </div>
-      </div>
-    )
-  }
-  if (kind === 'intercept') {
-    const { outcome, preflight } = data
-    return (
-      <div className="result-card">
-        <div className="result-grid">
-          <Stat label="Pre-flight" value={preflight.go ? 'GO' : 'NO-GO'} tone={preflight.go ? 'good' : 'bad'} />
-          <Stat label="Outcome" value={outcome.result} tone={outcome.result === 'INTERCEPT' ? 'good' : 'bad'} />
-          <Stat label="Miss distance" value={outcome.miss_km == null ? '—' : `${fmt.num(outcome.miss_km * 1000, 0)} m`} />
-          <Stat label="Intercept at" value={outcome.t == null ? '—' : `t+${fmt.num(outcome.t, 1)} s`} />
-        </div>
-        <div className="result-actions">
-          <button type="button" className="btn" onClick={() => navigate('intercept')}>
-            Open Intercept Lab
           </button>
         </div>
       </div>

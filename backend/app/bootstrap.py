@@ -170,7 +170,6 @@ class Astrix:
             "autonomy_limit": self.settings.auto_execute_max_risk.value,
             "vector_backend": self.settings.vector_backend,
             "database": self.settings.database_url.split("://")[0],
-            "hardware": {"connected": self.hardware.connected},
             "corpus_examples": self.model_lab.corpus.count() if self.model_lab else None,
             "accounts": self.auth.count_users(),
         }

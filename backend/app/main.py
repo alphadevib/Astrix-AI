@@ -29,7 +29,6 @@ from .api import (
     routes_assistant,
     routes_auth,
     routes_control,
-    routes_intercept,
     routes_model,
     routes_stages,
     routes_telemetry,
@@ -195,7 +194,6 @@ app.include_router(routes_auth.router)
 app.include_router(routes_telemetry.router)
 app.include_router(routes_stages.router)
 app.include_router(routes_control.router)
-app.include_router(routes_intercept.router)
 app.include_router(routes_vehicles.router)
 app.include_router(routes_model.router)
 app.include_router(routes_assistant.router)

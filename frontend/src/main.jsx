@@ -1,7 +1,6 @@
 import React, { Suspense, lazy } from 'react'
 import ReactDOM from 'react-dom/client'
 import Landing from './pages/Landing'
-import AstrixMark from './components/AstrixMark'
 
 // The landing page ships in the entry chunk; the console (charts, canvases,
 // WebSocket) is a separate chunk loaded only when someone opens /app.
@@ -11,7 +10,7 @@ function isConsolePath() {
   const path = window.location.pathname.replace(/\/+$/, '')
   if (path === '/app' || path.startsWith('/app/')) return true
   // Links from before the landing page existed used /#/control etc.
-  return path === '' && /^#\/(control|assurance|intercept|memory)/.test(window.location.hash)
+  return path === '' && /^#\/(control|assurance|memory)/.test(window.location.hash)
 }
 
 if (isConsolePath() && !window.location.pathname.startsWith('/app')) {
@@ -21,7 +20,7 @@ if (isConsolePath() && !window.location.pathname.startsWith('/app')) {
 function Loading() {
   return (
     <div className="boot" role="status" aria-live="polite">
-      <AstrixMark size={40} tone="nebula" />
+      <span className="spinner" aria-hidden="true" />
       <span>Starting Astrix…</span>
     </div>
   )

@@ -13,6 +13,12 @@ Routing:
   does not add a timeout to every telemetry cycle.
 - If nothing answers, callers get `None` and use their deterministic reasoner.
 
+Quota:
+- Every response's rate-limit headers (and 402/429 answers) are recorded per
+  provider, so the console can warn before a key's allowance runs out and say
+  when every reasoner is exhausted. An exhausted provider is skipped until its
+  reset time instead of being retried on every cycle.
+
 Tiers:
 - 'fast': rapid triage on the provider's small model
 - 'deep': diagnosis and trade-off analysis on the provider's large model
@@ -44,6 +50,11 @@ T = TypeVar("T", bound=BaseModel)
 
 FAILURE_THRESHOLD = 3
 COOLDOWN_SECONDS = 60.0
+# Warn when fewer than this share of a provider's request window is left.
+LOW_QUOTA_FRACTION = 0.1
+# Warn when this share of a published daily allowance has been used here.
+DAILY_WARN_FRACTION = 0.8
+_QUOTA_TEXT = re.compile(r"RESOURCE_EXHAUSTED|quota|rate.?limit|exceeded|credits", re.IGNORECASE)
 _CLOUD_MODEL_HINTS = ("claude", "gemini", "gpt-", "llama-3.3-70b-versatile")
 
 
@@ -63,6 +74,34 @@ def _clean_json_text(text: str) -> str:
     return text
 
 
+def _parse_duration(value: str | None) -> float | None:
+    """Seconds in '120', '7.66s', '2m59.56s' or '1h2m' (the forms providers send)."""
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    parts = re.findall(r"([\d.]+)\s*(ms|h|m|s)", value)
+    if not parts:
+        return None
+    scale = {"h": 3600.0, "m": 60.0, "s": 1.0, "ms": 0.001}
+    return sum(float(amount) * scale[unit] for amount, unit in parts)
+
+
+def _describe_wait(seconds: float) -> str:
+    if seconds < 90:
+        return f"{max(1, round(seconds))} s"
+    if seconds < 5400:
+        return f"{round(seconds / 60)} min"
+    return f"{seconds / 3600:.1f} h"
+
+
+def _today() -> str:
+    return time.strftime("%Y-%m-%d", time.gmtime())
+
+
 def _schema_instruction(output_model: type[BaseModel]) -> str:
     return (
         "CRITICAL: Respond ONLY with a valid JSON object strictly matching this schema:\n"
@@ -80,6 +119,7 @@ class ModelGateway:
         self.last_model: str | None = None
         self._lock = threading.Lock()
         self._health: dict[str, dict[str, float]] = {}
+        self._quota: dict[str, dict[str, Any]] = {}
         self._selected_model: str | None = None
         self._disabled_reason: str | None = None
         self._ollama_models: list[str] = []
@@ -199,6 +239,97 @@ class ModelGateway:
         h = self._health.get(key)
         return bool(h and h.get("benched_until", 0.0) > time.monotonic())
 
+    def _exhausted(self, key: str) -> bool:
+        q = self._quota.get(key)
+        return bool(q and q.get("exhausted_until", 0.0) > time.monotonic())
+
+    def _observe(self, key: str, resp: httpx.Response) -> None:
+        """Record the provider's own view of its limits, and any quota refusal."""
+        now = time.monotonic()
+        headers = resp.headers
+        with self._lock:
+            q = self._quota.setdefault(key, {})
+            if q.get("day") != _today():
+                q.update(day=_today(), used_today=0)
+            q["used_today"] += 1
+            limit, remaining = headers.get("x-ratelimit-limit-requests"), headers.get("x-ratelimit-remaining-requests")
+            if limit and remaining:
+                try:
+                    reset = _parse_duration(headers.get("x-ratelimit-reset-requests")) or COOLDOWN_SECONDS
+                    q["requests"] = {"limit": int(float(limit)), "remaining": int(float(remaining)), "reset_at": now + reset}
+                except ValueError:
+                    pass
+            code = resp.status_code
+            if code in (402, 429) or (code == 403 and _QUOTA_TEXT.search(resp.text[:500])):
+                retry = re.search(r'"retryDelay"\s*:\s*"([^"]+)"', resp.text[:4000])
+                wait = _parse_duration(headers.get("retry-after")) or _parse_duration(retry.group(1) if retry else None)
+                q["exhausted_until"] = now + (wait or (3600.0 if code == 402 else COOLDOWN_SECONDS))
+                q["exhausted_reason"] = "credits used up" if code == 402 else "rate limit reached"
+                log.warning("provider '%s' is out of quota (HTTP %s)", key, code)
+            elif code == 200:
+                q.pop("exhausted_until", None)
+                q.pop("exhausted_reason", None)
+
+    def usage(self, key: str) -> dict[str, Any]:
+        """How close a provider is to its limit: level 'ok' | 'low' | 'exhausted', and why."""
+        spec = PROVIDER_MAP.get(key)
+        label = spec.label if spec else key
+        now = time.monotonic()
+        q = self._quota.get(key, {})
+        used = q.get("used_today", 0) if q.get("day") == _today() else 0
+        daily = spec.daily_limit if spec else None
+        window = q.get("requests")
+        if window and window["reset_at"] <= now:
+            window = None
+        out: dict[str, Any] = {
+            "level": "ok",
+            "message": None,
+            "used_today": used,
+            "daily_limit": daily,
+            "requests": (
+                {"limit": window["limit"], "remaining": window["remaining"], "resets_in": round(window["reset_at"] - now)}
+                if window
+                else None
+            ),
+        }
+        if q.get("exhausted_until", 0.0) > now:
+            wait = _describe_wait(q["exhausted_until"] - now)
+            reason = q.get("exhausted_reason", "limit reached")
+            out.update(level="exhausted", message=f"{label}: {reason} — usable again in about {wait}.")
+        elif self._benched(key):
+            out.update(level="exhausted", message=f"{label} is failing repeatedly and is paused for a minute.")
+        elif window and window["remaining"] <= 0:
+            wait = _describe_wait(window["reset_at"] - now)
+            out.update(level="exhausted", message=f"{label}: request limit reached — resets in about {wait}.")
+        elif window and window["remaining"] <= window["limit"] * LOW_QUOTA_FRACTION:
+            wait = _describe_wait(window["reset_at"] - now)
+            out.update(
+                level="low",
+                message=f"{label}: only {window['remaining']} of {window['limit']} requests left — resets in about {wait}.",
+            )
+        elif daily and used >= daily * DAILY_WARN_FRACTION:
+            out.update(
+                level="low",
+                message=f"{label}: about {used} of its ~{daily} free daily requests used today — the limit is close.",
+            )
+        return out
+
+    def alert(self) -> dict[str, Any] | None:
+        """The one quota warning the console should show, if any."""
+        if not self.available:
+            return None
+        active = self.usage(self.active_provider)
+        if active["level"] == "ok":
+            return None
+        if active["level"] == "low":
+            return {"level": "low", "provider": self.active_provider, "message": active["message"]}
+        cloud = [spec for spec in PROVIDERS if spec.kind != "ollama" and self.configured(spec)]
+        if self.active_provider == "local" or all(self._exhausted(s.key) or self._benched(s.key) for s in cloud):
+            tail = "Every reasoner is out of quota, so Astrix is running on deterministic reasoning until one recovers."
+        else:
+            tail = "Other configured reasoners are covering in the meantime."
+        return {"level": "exhausted", "provider": self.active_provider, "message": f"{active['message']} {tail}"}
+
     def _record(self, key: str, ok: bool) -> None:
         with self._lock:
             h = self._health.setdefault(key, {"ok": 0, "fail": 0, "streak": 0, "benched_until": 0.0})
@@ -264,6 +395,8 @@ class ModelGateway:
             "last_provider": self.last_provider,
             "last_model": self.last_model,
             "providers_detected": {p.key: self.configured(p) for p in PROVIDERS},
+            "usage": self.usage(self.active_provider) if (spec and self.available) else None,
+            "alert": self.alert(),
         }
 
     def catalogue(self) -> list[dict[str, Any]]:
@@ -292,6 +425,7 @@ class ModelGateway:
                     "benched": self._benched(spec.key),
                     "ok": int(health.get("ok", 0)),
                     "failed": int(health.get("fail", 0)),
+                    "usage": self.usage(spec.key),
                 }
             )
         return out
@@ -303,7 +437,7 @@ class ModelGateway:
         for spec in PROVIDERS:
             if spec not in order and spec.kind != "ollama" and self.configured(spec):
                 order.append(spec)
-        return [spec for spec in order if not self._benched(spec.key)]
+        return [spec for spec in order if not self._benched(spec.key) and not self._exhausted(spec.key)]
 
     # ------------------------------------------------------------------ #
     # Inference
@@ -412,6 +546,7 @@ class ModelGateway:
         client = self._http(timeout or self.s.llm_timeout_seconds)
         # Header auth keeps the key out of URLs and access logs.
         resp = client.post(url, json=payload, headers={"x-goog-api-key": key})
+        self._observe(spec.key, resp)
         if resp.status_code != 200:
             raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
         data = resp.json()
@@ -448,6 +583,7 @@ class ModelGateway:
             # Not every model supports JSON mode; the schema instruction still applies.
             payload.pop("response_format")
             resp = client.post(url, json=payload, headers=headers)
+        self._observe(spec.key, resp)
         if resp.status_code != 200:
             raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
         message = resp.json().get("choices", [{}])[0].get("message", {})

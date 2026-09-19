@@ -11,7 +11,7 @@ export const NOTICE_SHORT =
   'Astrix results are hypothetical and must be verified using real-time prototypes and uploaded data.'
 
 export const NOTICE_FULL =
-  'Results produced by Astrix are hypothetical. Telemetry, launch, intercept and vehicle models are simulations and first-order estimates, and AI reasoning is advisory. Every result must be verified against real-time prototypes, hardware-in-the-loop tests and uploaded flight or test data before it informs any engineering or operational decision.'
+  'Results produced by Astrix are hypothetical. Telemetry, launch and vehicle models are simulations and first-order estimates, and AI reasoning is advisory. Every result must be verified against real-time prototypes, hardware-in-the-loop tests and uploaded flight or test data before it informs any engineering or operational decision.'
 
 const ACK_KEY = 'astrix.noticeAcknowledged.v1'
 

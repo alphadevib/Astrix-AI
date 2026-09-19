@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Astrix">
-  <title>Astrix</title>
-  <defs>
-    <linearGradient id="nebula" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#A99BFF"/><stop offset="55%" stop-color="#6150FF"/><stop offset="100%" stop-color="#4F39F6"/></linearGradient>
-    <mask id="star"><rect width="96" height="96" fill="#fff"/><path d="M48 32Q50.6 44.4 63 47Q50.6 49.6 48 62Q45.4 49.6 33 47Q45.4 44.4 48 32Z" fill="#000"/></mask>
-  </defs>
-  <path d="M48 8C56 8 88 78 88 84C88 88 84 90 80 88L48 70L16 88C12 90 8 88 8 84C8 78 40 8 48 8Z" fill="url(#nebula)" mask="url(#star)"/>
-</svg>

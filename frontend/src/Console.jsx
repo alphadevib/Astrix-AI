@@ -1,6 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import AppShell from './components/AppShell'
-import AstrixMark from './components/AstrixMark'
 import Auth from './pages/Auth'
 import api from './services/api'
 import session from './services/auth'
@@ -12,7 +11,6 @@ import './styles/astrix.css'
 
 const Assistant = lazy(() => import('./pages/Assistant'))
 const FlightAssurance = lazy(() => import('./pages/FlightAssurance'))
-const InterceptLab = lazy(() => import('./pages/InterceptLab'))
 const VehicleStudio = lazy(() => import('./pages/VehicleStudio'))
 const ModelLab = lazy(() => import('./pages/ModelLab'))
 const MissionMemory = lazy(() => import('./pages/MissionMemory'))
@@ -29,12 +27,6 @@ export const PAGES = [
     key: 'assurance',
     label: 'Flight Assurance',
     description: 'Spacecraft anomaly testing from the launch pad to orbit',
-    group: 'workspace',
-  },
-  {
-    key: 'intercept',
-    label: 'Intercept Lab',
-    description: 'Missile trajectory testing and predicted target intercept',
     group: 'workspace',
   },
   {
@@ -158,7 +150,7 @@ export default function Console() {
   if (!user) {
     return (
       <div className="boot" role="status" aria-live="polite">
-        <AstrixMark size={40} tone="nebula" />
+        <span className="spinner" aria-hidden="true" />
         <span>Signing in…</span>
       </div>
     )
@@ -287,7 +279,6 @@ function Workspace({ user, onUserUpdated }) {
           />
         )}
         {page === 'assurance' && <FlightAssurance stream={stream} vehicle={vehicle} />}
-        {page === 'intercept' && <InterceptLab />}
         {page === 'studio' && <VehicleStudio design={vehicle} onDesign={setVehicle} navigate={navigate} />}
         {page === 'model' && <ModelLab />}
         {page === 'memory' && <MissionMemory />}

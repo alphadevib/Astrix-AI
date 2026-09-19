@@ -72,7 +72,7 @@ export default function Auth({ onSignedIn, reason }) {
           <p>
             {creating
               ? 'Your conversations, missions and preferences stay with your account.'
-              : 'Spacecraft assurance, intercept testing and hardware in the loop.'}
+              : 'Spacecraft anomaly assurance, recovery and vehicle design.'}
           </p>
         </div>
 

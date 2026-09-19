@@ -1,8 +1,8 @@
 """Reasoner selection and the Astrix operator assistant.
 
 The assistant is the conversational front door to the console. Operational
-intents — launch, stop, inject, clear, approve, design a vehicle, run an
-intercept check, command the hardware, train the model, switch reasoner — are
+intents — launch, stop, inject, clear, approve, design a vehicle, train the
+model, switch reasoner — are
 recognised deterministically and executed through the same services the
 buttons use, so a chat command can never do something a button could not.
 Everything else is answered by the active LLM with a live state summary, or by
@@ -90,8 +90,6 @@ HELP = """I can operate the whole console. Try:
 - **approve** / **reject** the pending recovery
 - **explain** the current anomaly · **status**
 - **design** a 3-stage rocket for a 400 kg imaging satellite to 700 km
-- **intercept** check (add *with seeker dropout*, *GPS spoofing* …)
-- **inject brownout on hardware** · **hardware status**
 - **train model** · **use groq** / *switch to local qwen3:8b* / *use deterministic*"""
 
 
@@ -133,7 +131,6 @@ def _state_summary(astrix) -> dict[str, Any]:
         "last_diagnosis": (cycle or {}).get("diagnosis"),
         "last_risk": (cycle or {}).get("risk"),
         "selected_action": ((cycle or {}).get("plan") or {}).get("selected_action_id"),
-        "hardware": {"connected": astrix.hardware.connected, "calibrated": astrix.hardware.baseline is not None},
         "reasoner": astrix.llm.status.get("provider"),
     }
 
@@ -158,8 +155,7 @@ def _status_text(state: dict[str, Any]) -> str:
         a = state["awaiting_approval"][0]
         lines.append(f"Awaiting your approval: `{a['action_id']}` ({a['risk_level']}) — say **approve** or **reject**.")
     lines.append(
-        f"Anomalies opened: {state['anomalies_opened']}, suppressed as benign: {state['suppressed']}. "
-        f"Hardware: {'connected' if state['hardware']['connected'] else 'not connected'}."
+        f"Anomalies opened: {state['anomalies_opened']}, suppressed as benign: {state['suppressed']}."
     )
     return "\n\n".join(lines)
 
@@ -190,7 +186,7 @@ async def _handle_intent(astrix, text: str, body: ChatRequest) -> dict[str, Any]
         result = await runner.stop()
         return {"reply": "Mission stopped.", "cards": [{"kind": "mission", "data": result}]}
 
-    if re.search(r"\b(launch|start|fly)\b", t) and not re.search(r"\b(design|generate|intercept|missile)\b", t):
+    if re.search(r"\b(launch|start|fly)\b", t) and not re.search(r"\b(design|generate)\b", t):
         include_launch = not re.search(r"in orbit|skip (the )?launch|no launch", t)
         launch_fault = None
         if "premature" in t or "meco" in t:
@@ -222,7 +218,7 @@ async def _handle_intent(astrix, text: str, body: ChatRequest) -> dict[str, Any]
             return {"reply": str(exc)}
         return {"reply": "Fault cleared." if result["cleared"] else "There was no active fault to clear."}
 
-    if re.search(r"\binject\b", t) and not re.search(r"\b(intercept|missile|interceptor)\b", t):
+    if re.search(r"\binject\b", t):
         from telemetry.scenarios import SCENARIOS
 
         key = _best_match(t, {k: s.title for k, s in SCENARIOS.items()})
@@ -261,30 +257,6 @@ async def _handle_intent(astrix, text: str, body: ChatRequest) -> dict[str, Any]
             ),
             "cards": [{"kind": "design", "data": report}],
         }
-
-    # ---- intercept ---------------------------------------------------------
-    if re.search(r"\b(intercept|missile|interceptor)\b", t):
-        from telemetry.intercept import FAULTS as INTERCEPT_FAULTS
-        from telemetry.intercept import EngagementConfig, simulate_engagement
-
-        fault = None
-        if "with" in t or "fault" in t or "attack" in t:
-            fault = _best_match(t.split("with", 1)[-1], {k: f.title for k, f in INTERCEPT_FAULTS.items()})
-        result = await asyncio.to_thread(simulate_engagement, EngagementConfig(fault=fault))
-        o, p = result["outcome"], result["preflight"]
-        reply = (
-            f"Pre-flight check: **{'GO' if p['go'] else 'NO-GO'}** — predicted intercept at "
-            f"t={p['predicted']['t_intercept']} s, miss {((p['predicted']['miss_km'] or 0) * 1000):.0f} m. "
-            f"Flown engagement: **{o['result']}**"
-            + (f", miss {o['miss_km'] * 1000:.0f} m." if o["miss_km"] is not None else ".")
-        )
-        if result["detection"]:
-            det = result["detection"]
-            reply += (
-                f" Injected `{fault}` detected after {det['latency_s']} s, diagnosed as `{det['diagnosed']}` "
-                f"({'correct' if det['correct'] else 'incorrect'})."
-            )
-        return {"reply": reply, "cards": [{"kind": "intercept", "data": {"outcome": o, "preflight": p, "detection": result["detection"]}}], "navigate": None}
 
     # ---- model -------------------------------------------------------------
     if re.search(r"\btrain\b.*\bmodel\b|\bretrain\b", t) and astrix.model_lab is not None:
@@ -372,7 +344,7 @@ async def assistant_chat(body: ChatRequest, user: CurrentUser, astrix: AstrixDep
         gateway = astrix.llm.gateway
         state = (result or {}).get("llm_context") or _state_summary(astrix)
         system = (
-            "You are Astrix, the operator assistant for a spacecraft anomaly-assurance and intercept-testing "
+            "You are Astrix, the operator assistant for a spacecraft anomaly-assurance "
             "console. Be concise and precise; use markdown sparingly. For questions about the current mission, "
             "ground every statement in the state JSON below and say so if it lacks the answer; never invent "
             "telemetry or results. General spacecraft, launch and engineering questions may be answered from "
